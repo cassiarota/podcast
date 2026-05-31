@@ -5,8 +5,7 @@ import { useT } from "../lib/i18n";
 import { TOC } from "./TOC";
 
 const AUTO_HIDE_MS = 2200;
-const SWIPE_THRESHOLD_PX = 50;
-const SWIPE_MAX_DURATION_MS = 600;
+const SWIPE_THRESHOLD_PX = 40;
 
 interface ReaderProps {
   bookId: string;
@@ -63,26 +62,37 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
   }, [next, prev, close, controlsVisible, hideControls]);
 
   // Pointer-based gesture handling for the main content area.
-  // - When the controls are visible: any tap on the main area hides them.
-  //   We deliberately do NOT advance the page in that case — matching the
-  //   "tap outside menu to hide" mental model.
+  // - When the controls are visible: any pointer up hides them. No page turn.
   // - When hidden:
-  //   - In "tap" mode: left/right thirds turn pages; center reveals controls.
-  //   - In "swipe" mode: a horizontal drag turns pages; a stationary tap
+  //   - "tap" mode: left/right thirds turn pages; center reveals controls.
+  //   - "swipe" mode: any drag whose dominant axis exceeds the threshold
+  //     turns a page (left/up = next, right/down = prev). Stationary tap
   //     toggles controls.
   const pointerStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const handleMainPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     pointerStartRef.current = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+    // Capture the pointer so we get the matching pointerup even if the
+    // pointer leaves the overlay area mid-drag (the common case for a
+    // mouse drag that drifts upward into the menu region).
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* old browsers — ignore */
+    }
   };
 
   const handleMainPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const start = pointerStartRef.current;
     pointerStartRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     if (!start) return;
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
-    const dt = e.timeStamp - start.t;
     const target = e.currentTarget;
     const width = target.clientWidth;
 
@@ -92,30 +102,30 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
       return;
     }
 
-    // 2. Recognize swipe (large horizontal delta, small vertical, quick).
-    const isSwipe =
-      settings.pageTurnMode === "swipe" &&
-      Math.abs(dx) >= SWIPE_THRESHOLD_PX &&
-      Math.abs(dx) > Math.abs(dy) * 1.5 &&
-      dt < SWIPE_MAX_DURATION_MS;
-    if (isSwipe) {
-      if (dx < 0) next();
-      else prev();
+    // 2. Recognize swipe — accept either horizontal OR vertical drag whose
+    //    magnitude clears the threshold. Whichever axis is larger wins.
+    if (settings.pageTurnMode === "swipe") {
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      const dominant = absX >= absY ? "x" : "y";
+      const magnitude = Math.max(absX, absY);
+      if (magnitude >= SWIPE_THRESHOLD_PX) {
+        // For both axes: forward (left or up) = next, back (right or down) = prev.
+        const forward = dominant === "x" ? dx < 0 : dy < 0;
+        if (forward) next();
+        else prev();
+        return;
+      }
+      // Stationary tap → toggle menu (the only way to open it in swipe mode).
+      toggleControls();
       return;
     }
 
-    // 3. Treat the rest as a stationary tap.
-    if (settings.pageTurnMode === "tap") {
-      // Tap regions: left third = prev, right third = next, center = menu.
-      const x = e.clientX;
-      if (x < width / 3) prev();
-      else if (x > (2 * width) / 3) next();
-      else showControls();
-    } else {
-      // In swipe mode, a single tap toggles the menu (it's the only way to
-      // reach it).
-      toggleControls();
-    }
+    // 3. Tap mode: left third = prev, right third = next, center = menu.
+    const x = e.clientX;
+    if (x < width / 3) prev();
+    else if (x > (2 * width) / 3) next();
+    else showControls();
   };
 
   const percent = pageCount > 0 ? Math.round(((pageIndex + 1) / pageCount) * 100) : 0;

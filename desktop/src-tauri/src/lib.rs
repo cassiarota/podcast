@@ -70,6 +70,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             reader::import_book,
             reader::list_books,
+            reader::delete_book,
             reader::open_book,
             reader::get_page,
             reader::first_page_of_section,

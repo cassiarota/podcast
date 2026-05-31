@@ -168,6 +168,35 @@ pub fn import_book(
 }
 
 #[tauri::command]
+pub fn delete_book(state: State<AppState>, book_id: String) -> Result<(), String> {
+    // Pull the WAV paths first so we can clean up the cache files on disk.
+    let conn = state.db.lock();
+    let mut stmt = conn
+        .prepare("SELECT path FROM audio_chunks WHERE book_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let paths: Vec<String> = stmt
+        .query_map(params![book_id], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+    drop(stmt);
+
+    // CASCADE deletes sections, pages, reading_positions, tts_jobs.
+    // audio_chunks lacks a FK so we delete it explicitly.
+    conn.execute("DELETE FROM audio_chunks WHERE book_id = ?1", params![book_id])
+        .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM books WHERE id = ?1", params![book_id])
+        .map_err(|e| e.to_string())?;
+    drop(conn);
+
+    // Best-effort: scrub the WAV files from disk.
+    for p in paths {
+        let _ = std::fs::remove_file(&p);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_books(state: State<AppState>) -> Result<Vec<Book>, String> {
     let conn = state.db.lock();
     let mut stmt = conn

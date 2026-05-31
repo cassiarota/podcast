@@ -16,6 +16,27 @@ interface Messages {
   "library.import": string;
   "library.empty": string;
   "library.importFailed": string;
+  "library.select": string;
+  "library.selectExit": string;
+  "library.selected": string;
+  "library.actions.generateAudio": string;
+  "library.actions.delete": string;
+  "library.actions.viewToc": string;
+  "library.actions.close": string;
+  "library.actions.cancel": string;
+  "library.deleteConfirm": string;
+  "library.deleteConfirmPlural": string;
+  "library.generateConfirm": string;
+  "library.generateConfirmPlural": string;
+  "library.bookActions": string;
+  "library.longPressHint": string;
+  "library.batchGenerate": string;
+  "library.batchDelete": string;
+  "library.toc": string;
+  "library.generateThisChapter": string;
+  "library.jobStarted": string;
+  "library.jobProgress": string;
+  "library.jobDone": string;
 
   // Reader
   "reader.back": string;
@@ -78,6 +99,27 @@ const ZH: Messages = {
   "library.import": "+ 导入书籍",
   "library.empty": "书架空空如也。点击下方导入按钮开始阅读。",
   "library.importFailed": "导入失败",
+  "library.select": "批量",
+  "library.selectExit": "取消批量",
+  "library.selected": "已选 {n}",
+  "library.actions.generateAudio": "生成整本书音频",
+  "library.actions.delete": "删除书籍",
+  "library.actions.viewToc": "查看目录",
+  "library.actions.close": "关闭",
+  "library.actions.cancel": "取消",
+  "library.deleteConfirm": "确认删除「{title}」？已生成的音频缓存会一并清掉。",
+  "library.deleteConfirmPlural": "确认删除 {n} 本书？已生成的音频缓存会一并清掉。",
+  "library.generateConfirm": "开始为「{title}」生成整本书音频？需要一些时间。",
+  "library.generateConfirmPlural": "开始为这 {n} 本书生成整本书音频？需要较长时间。",
+  "library.bookActions": "书籍操作",
+  "library.longPressHint": "长按书籍查看更多操作",
+  "library.batchGenerate": "生成所选 {n} 本",
+  "library.batchDelete": "删除所选 {n} 本",
+  "library.toc": "目录",
+  "library.generateThisChapter": "生成本章",
+  "library.jobStarted": "已开始生成「{title}」",
+  "library.jobProgress": "{title}：{percent}%",
+  "library.jobDone": "「{title}」生成完成",
 
   "reader.back": "← 书架",
   "reader.contents": "目录",
@@ -137,6 +179,27 @@ const EN: Messages = {
   "library.import": "+ Import a book",
   "library.empty": "Your shelf is empty. Tap the import button below to begin.",
   "library.importFailed": "Import failed",
+  "library.select": "Select",
+  "library.selectExit": "Cancel select",
+  "library.selected": "{n} selected",
+  "library.actions.generateAudio": "Generate audio for whole book",
+  "library.actions.delete": "Delete book",
+  "library.actions.viewToc": "View contents",
+  "library.actions.close": "Close",
+  "library.actions.cancel": "Cancel",
+  "library.deleteConfirm": "Delete \"{title}\"? All cached audio for this book will be removed too.",
+  "library.deleteConfirmPlural": "Delete {n} books? All cached audio for these books will be removed too.",
+  "library.generateConfirm": "Generate audio for the whole book \"{title}\"? This can take a while.",
+  "library.generateConfirmPlural": "Generate audio for {n} whole books? This will take a long time.",
+  "library.bookActions": "Book actions",
+  "library.longPressHint": "Long-press a book for more actions",
+  "library.batchGenerate": "Generate audio for {n} selected",
+  "library.batchDelete": "Delete {n} selected",
+  "library.toc": "Contents",
+  "library.generateThisChapter": "Generate chapter",
+  "library.jobStarted": "Started generating \"{title}\"",
+  "library.jobProgress": "{title}: {percent}%",
+  "library.jobDone": "\"{title}\" generation complete",
 
   "reader.back": "← Library",
   "reader.contents": "Contents",
@@ -198,6 +261,14 @@ export type MessageKey = keyof Messages;
 export function translate(locale: Locale | undefined, key: MessageKey): string {
   const table = TABLES[locale ?? "zh"] ?? ZH;
   return table[key];
+}
+
+/** Format a message with `{name}` placeholders replaced from `params`. */
+export function format(template: string, params: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => {
+    const v = params[k];
+    return v == null ? `{${k}}` : String(v);
+  });
 }
 
 import { useSettingsStore } from "../state/settings";

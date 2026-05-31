@@ -104,6 +104,7 @@ export const api = {
   importBook: (path: string, generateAudio = false): Promise<Book> =>
     invoke("import_book", { path, generateAudio }),
   listBooks: (): Promise<Book[]> => invoke("list_books"),
+  deleteBook: (bookId: string): Promise<void> => invoke("delete_book", { bookId }),
   openBook: (bookId: string): Promise<{ book: Book; sections: Section[] }> =>
     invoke("open_book", { bookId }),
   getPage: (bookId: string, pageIndex: number): Promise<Page | null> =>

@@ -28,14 +28,28 @@ body {
 .settings-button:hover { background: rgba(0,0,0,0.7); }
 .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 24px 18px; padding-bottom: 100px; }
 .book-tile {
+  position: relative;
   cursor: pointer; height: 200px; padding: 14px 12px;
   background: linear-gradient(135deg, #6b4423 0%, #8b5a2b 100%);
   color: #f5e6d3; border-radius: 4px;
   box-shadow: 2px 4px 8px rgba(0,0,0,0.3), inset -3px 0 6px rgba(0,0,0,0.2);
   display: flex; flex-direction: column; justify-content: space-between;
-  font-weight: 600; line-height: 1.25; transition: transform 0.1s;
+  font-weight: 600; line-height: 1.25; transition: transform 0.1s, box-shadow 0.1s;
+  user-select: none;
 }
 .book-tile:hover { transform: translateY(-2px); }
+.book-tile.selected {
+  outline: 3px solid #f5d36b;
+  box-shadow: 0 0 0 6px rgba(245, 211, 107, 0.25), 2px 4px 8px rgba(0,0,0,0.3);
+}
+.book-checkbox {
+  position: absolute; top: 6px; right: 6px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+}
+.book-checkbox.checked { background: #f5d36b; color: #1a1a1a; }
 .book-tile .title { font-size: 15px; overflow: hidden; }
 .book-tile .author { font-size: 12px; opacity: 0.8; font-weight: 400; }
 .import-tile {
@@ -61,7 +75,7 @@ body {
  * call stopPropagation so menu clicks never bubble down. */
 .tap-overlay {
   position: absolute; inset: 0; cursor: pointer;
-  touch-action: pan-y;
+  touch-action: none;
   z-index: 1;
 }
 .controls {
@@ -153,3 +167,76 @@ body {
 }
 .settings-control button.ghost:hover { color: #fff; border-color: #666; }
 .settings-meta { color: #888; font-size: 12px; }
+
+/* Library extras */
+.library-hint {
+  color: rgba(255,255,255,0.55); font-size: 12px; margin: -8px 0 16px;
+}
+.batch-bar {
+  position: fixed; bottom: 16px; left: 24px; right: 24px;
+  background: rgba(20,20,20,0.95); color: #eee;
+  padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+  border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); z-index: 6;
+}
+.batch-count { font-size: 14px; }
+.batch-bar button {
+  background: #333; color: #eee; border: none; padding: 8px 14px;
+  border-radius: 4px; cursor: pointer; font-size: 14px;
+}
+.batch-bar button.primary { background: #2a6f4a; }
+.batch-bar button.primary:hover { background: #38805b; }
+.batch-bar button.danger { background: #7a2a2a; }
+.batch-bar button.danger:hover { background: #9c3434; }
+
+/* Book actions modal */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 10;
+  padding: 24px;
+}
+.modal {
+  background: #1f1f1f; color: #eee; border-radius: 10px;
+  max-width: 560px; width: 100%; max-height: 80vh; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+}
+.modal-header { padding: 18px 22px 8px; border-bottom: 1px solid #333; }
+.modal-header h2 { margin: 0 0 4px; font-size: 18px; }
+.modal-meta { color: #999; font-size: 12px; }
+.modal-actions { padding: 14px 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.modal-actions-spacer { flex: 1; }
+.modal-actions button {
+  background: #2a2a2a; color: #eee; border: 1px solid #3a3a3a;
+  padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 14px;
+}
+.modal-actions button:hover { background: #333; }
+.modal-actions button.primary { background: #2a6f4a; border-color: #2a6f4a; }
+.modal-actions button.primary:hover { background: #38805b; }
+.modal-actions button.danger { background: transparent; border-color: #7a2a2a; color: #d97a7a; }
+.modal-actions button.danger:hover { background: #7a2a2a; color: #fff; }
+.modal-actions button:disabled { opacity: 0.5; cursor: progress; }
+.modal-toc { padding: 8px 18px 18px; overflow-y: auto; }
+.modal-toc-row {
+  display: flex; gap: 12px; align-items: center;
+  padding: 8px 0; border-top: 1px solid #2a2a2a;
+}
+.modal-toc-title { flex: 1; font-size: 13px; color: #ccc; }
+.modal-toc-row button {
+  background: #2a2a2a; color: #eee; border: 1px solid #3a3a3a;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.modal-toc-row button:hover { background: #333; }
+
+/* Jobs banner */
+.jobs-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 7;
+  background: rgba(20,20,20,0.95); color: #eee;
+  padding: 8px 16px 10px; display: flex; flex-direction: column; gap: 6px;
+  font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.jobs-row { display: flex; flex-direction: column; gap: 4px; }
+.jobs-row-label { font-variant-numeric: tabular-nums; }
+.jobs-row-bar { height: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+.jobs-row-fill { height: 100%; background: #2a6f4a; transition: width 0.3s; }
+.jobs-row-done .jobs-row-fill { background: #4a9468; }
+.jobs-row-failed .jobs-row-fill { background: #9c3434; }

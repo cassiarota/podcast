@@ -191,7 +191,11 @@ pub async fn start_tts_job(
             }
             let _ = window_clone.emit(
                 "tts:progress",
-                serde_json::json!({ "job_id": job_id_task, "progress": progress }),
+                serde_json::json!({
+                    "job_id": job_id_task,
+                    "book_id": book_id_task,
+                    "progress": progress,
+                }),
             );
         }
         let final_status = {
@@ -217,7 +221,11 @@ pub async fn start_tts_job(
         );
         let _ = window_clone.emit(
             "tts:done",
-            serde_json::json!({ "job_id": job_id_task, "status": final_status }),
+            serde_json::json!({
+                "job_id": job_id_task,
+                "book_id": book_id_task,
+                "status": final_status,
+            }),
         );
     });
 
