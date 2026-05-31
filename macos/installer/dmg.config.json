@@ -1,0 +1,15 @@
+{
+  "_": "Overrides applied on top of tauri.conf.json's bundle.macOS section.",
+  "frameworks": [],
+  "minimumSystemVersion": "13.0",
+  "exceptionDomain": null,
+  "license": null,
+  "providerShortName": null,
+  "signingIdentity": null,
+  "dmg": {
+    "background": null,
+    "windowSize": { "width": 660, "height": 400 },
+    "appPosition": { "x": 180, "y": 170 },
+    "applicationFolderPosition": { "x": 480, "y": 170 }
+  }
+}

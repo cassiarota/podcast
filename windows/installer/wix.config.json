@@ -1,0 +1,16 @@
+{
+  "_": "Overrides applied on top of tauri.conf.json's bundle.windows section.",
+  "wix": {
+    "language": ["en-US"],
+    "componentRefs": [],
+    "componentGroupRefs": [],
+    "fragmentPaths": [],
+    "skipWebviewInstall": false,
+    "template": null
+  },
+  "nsis": null,
+  "_excluded_paths": [
+    "Qwen3-TTS-12Hz-1.7B-CustomVoice/**",
+    "Qwen3-TTS-Tokenizer-12Hz/**"
+  ]
+}

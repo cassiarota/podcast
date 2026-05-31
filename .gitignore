@@ -5,3 +5,14 @@ target/
 .venv/
 __pycache__/
 *.pyc
+
+# desktop app build outputs
+desktop/dist/
+desktop/src-tauri/target/
+desktop/sidecar/.venv/
+desktop/sidecar/.pytest_cache/
+
+# local data
+*.db
+audio_cache/
+demo_runtime/

@@ -1,0 +1,16 @@
+/* 10 background presets per docs §Reader UX */
+:root {
+  --font-size: 19px;
+  --brightness: 1;
+}
+
+body[data-theme="white"] { background: #ffffff; color: #1a1a1a; }
+body[data-theme="warm-paper"] { background: #f7f0e1; color: #2b2417; }
+body[data-theme="sepia"] { background: #f4ecd8; color: #5b4636; }
+body[data-theme="eye-protect-green"] { background: #cbe1c1; color: #1f2d1c; }
+body[data-theme="gray"] { background: #d6d6d6; color: #222; }
+body[data-theme="low-contrast"] { background: #ddd6c8; color: #4a463e; }
+body[data-theme="cool-paper"] { background: #eef2f6; color: #1a2230; }
+body[data-theme="rose"] { background: #f3d9d9; color: #3d1a1a; }
+body[data-theme="dark"] { background: #2a2a2a; color: #d8d8d8; }
+body[data-theme="black"] { background: #000000; color: #c0c0c0; }

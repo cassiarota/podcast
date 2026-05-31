@@ -1,0 +1,10 @@
+# Kokoro TTS sidecar deps (macOS)
+fastapi>=0.115
+uvicorn>=0.32
+pydantic>=2.9
+numpy>=1.26
+soundfile>=0.12
+
+# Kokoro Python package — installs only if available on the platform.
+# The sidecar falls back to a stub engine if this import fails.
+kokoro>=0.9

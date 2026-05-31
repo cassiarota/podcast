@@ -1,0 +1,24 @@
+[project]
+name = "podcast-reader-sidecar"
+version = "0.1.0"
+description = "Lazy local TTS sidecar — never imports torch/kokoro/qwen at module scope"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "pydantic>=2.9",
+    "numpy>=1.26",
+    "soundfile>=0.12",
+]
+
+[project.optional-dependencies]
+kokoro = ["kokoro>=0.9"]
+qwen = ["qwen-tts>=0.1", "torch>=2.4"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

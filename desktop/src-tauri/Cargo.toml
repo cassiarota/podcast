@@ -1,0 +1,38 @@
+[package]
+name = "podcast-reader"
+version = "0.1.0"
+description = "Tauri v2 native reader app with local TTS"
+authors = ["podcast-reader"]
+edition = "2021"
+
+[lib]
+name = "podcast_reader_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+epub = "2.1"
+once_cell = "1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures-util = "0.3"
+parking_lot = "0.12"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
