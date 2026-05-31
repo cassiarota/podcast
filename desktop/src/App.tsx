@@ -1,20 +1,25 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Library } from "./views/Library";
 import { Reader } from "./views/Reader";
+import { Settings } from "./views/Settings";
 import { useLibraryStore } from "./state/library";
 import { useReaderStore } from "./state/reader";
 import { useSettingsStore } from "./state/settings";
+import { useTtsSettingsStore } from "./state/tts";
 
 export function App() {
   const refreshBooks = useLibraryStore((s) => s.refresh);
   const openBookId = useReaderStore((s) => s.openBookId);
   const loadSettings = useSettingsStore((s) => s.load);
   const settings = useSettingsStore((s) => s.settings);
+  const loadTts = useTtsSettingsStore((s) => s.load);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     refreshBooks();
     loadSettings();
-  }, [refreshBooks, loadSettings]);
+    loadTts();
+  }, [refreshBooks, loadSettings, loadTts]);
 
   useEffect(() => {
     document.body.dataset.theme = settings.background;
@@ -30,7 +35,13 @@ export function App() {
 
   return (
     <div className="app">
-      {openBookId ? <Reader bookId={openBookId} /> : <Library />}
+      {settingsOpen ? (
+        <Settings onClose={() => setSettingsOpen(false)} />
+      ) : openBookId ? (
+        <Reader bookId={openBookId} onOpenSettings={() => setSettingsOpen(true)} />
+      ) : (
+        <Library onOpenSettings={() => setSettingsOpen(true)} />
+      )}
       <div
         className="dim-overlay"
         style={{ opacity: 1 - settings.brightness }}

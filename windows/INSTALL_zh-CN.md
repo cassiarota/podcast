@@ -2,6 +2,8 @@
 
 本文档说明如何在 Windows 上安装并运行 Podcast Reader 桌面应用，TTS 引擎使用 Qwen（而不是 macOS 默认的 Kokoro）。Qwen 需要 NVIDIA CUDA GPU，没有 CPU 兜底。
 
+> **更简单的路：直接用 Kokoro。** 如果你不想折腾 CUDA + Qwen，应用现在在「设置 → 语音生成 → 引擎」里支持切换到 Kokoro，可以 CPU 运行，支持中文及其他 8 种语言。详见本文末 **附录：Windows 用 Kokoro 替代 Qwen**。
+
 ## 1. 前置条件
 
 | 项 | 要求 |
@@ -182,3 +184,59 @@ Test-Path D:\models\Qwen3-TTS-Tokenizer-12Hz
 - `docs/reader-app-plan.md` —— 完整产品与技术方案。
 - `desktop/sidecar/engine_qwen.py` —— Qwen 引擎实现，模型路径硬编码在此。
 - `desktop/src-tauri/src/sidecar.rs` —— 子进程生命周期管理。
+
+## 附录：Windows 用 Kokoro 替代 Qwen（推荐，无需 CUDA）
+
+如果你只想让朗读功能跑起来，不在乎 Qwen 的具体音色，**Kokoro 是更省事的路**：
+
+- 不需要 NVIDIA GPU，CPU 即可
+- 不需要 `D:\models\Qwen3-TTS-*` 那两个外部目录
+- 直接 `pip install kokoro`（不需要 `--index-url` 和 CUDA 版 PyTorch）
+- 支持 9 种语言，包括 **中文（Mandarin）**
+
+### 步骤
+
+1. **拉取 Kokoro 模型权重**（一次性，约 330 MB）：
+   ```powershell
+   git lfs install
+   git lfs pull
+   ```
+   完成后 `models\Kokoro-82M\kokoro-v1_0.pth` 应该是几百 MB 而不是 1 KB 指针。
+
+2. **创建 Python 环境**：
+   ```powershell
+   cd desktop\sidecar
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install fastapi uvicorn pydantic numpy soundfile kokoro
+   ```
+   注意：**不要**装 CUDA 版的 torch。`kokoro` 包会自己把需要的 CPU 版 torch 拉下来。
+
+3. **启动应用**：
+   ```powershell
+   cd ..\..\desktop
+   pnpm install
+   pnpm tauri dev
+   ```
+
+4. **在应用里切换到 Kokoro**：
+   - 主界面右上角 **⚙ 设置**
+   - 引擎下拉里选 **Kokoro 82M**
+   - 语言选 **中文 (Mandarin)** 或别的
+   - 音色按语言过滤；中文音色有 `zf_xiaoxiao`、`zm_yunxi` 等 8 个
+   - 回到阅读页，按 ▶ 播放即可
+
+### Kokoro 中文音色一览
+
+| ID | 风格 |
+| --- | --- |
+| `zf_xiaobei` | 女声，温和 |
+| `zf_xiaoni` | 女声，活泼 |
+| `zf_xiaoxiao` | 女声，标准 |
+| `zf_xiaoyi` | 女声，年轻 |
+| `zm_yunjian` | 男声，沉稳 |
+| `zm_yunxi` | 男声，标准 |
+| `zm_yunxia` | 男声，温润 |
+| `zm_yunyang` | 男声，磁性 |
+
+第一次播放某语言时，Kokoro 会加载该语言的 phonemizer（中文约 100 MB，下载到缓存），之后切换很快。

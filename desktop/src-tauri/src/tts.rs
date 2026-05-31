@@ -69,7 +69,20 @@ pub async fn start_tts_job(
     voice_preset: String,
 ) -> Result<TtsJob, String> {
     state.sidecar.ensure_running().await.map_err(|e| e.to_string())?;
-    let engine = state.sidecar.engine_for_platform().to_string();
+    // Read the user-saved settings; engine override + language + speed all
+    // come from here instead of the old platform-hardcoded value.
+    let tts_settings = crate::reader::get_tts_settings(state.clone())
+        .unwrap_or_else(|_| crate::reader::TtsSettings::default());
+    let engine = tts_settings.engine.clone();
+    let language_for_task = tts_settings.language.clone();
+    let speed_for_task = tts_settings.speed as f32;
+    // The voice from the play form takes precedence, but if the caller
+    // sends an empty string we fall back to the saved preset.
+    let voice_for_task = if voice_preset.is_empty() {
+        tts_settings.voice.clone()
+    } else {
+        voice_preset.clone()
+    };
     let job_id = Uuid::new_v4().to_string();
     let now = now_secs();
 
@@ -91,7 +104,7 @@ pub async fn start_tts_job(
     let total = pages.len();
     let port = state.sidecar.port();
     let audio_dir = state.sidecar.audio_cache_dir();
-    let voice_for_task = voice_preset.clone();
+    // voice_for_task already resolved above from saved settings.
 
     let db = state.db.clone();
     let job_id_task = job_id.clone();
@@ -122,13 +135,15 @@ pub async fn start_tts_job(
             }
 
             let text_hash = hex::encode(Sha256::digest(text.as_bytes()));
-            let key = cache::cache_key(&text_hash, &engine_task, &voice_for_task, "en", 1.0);
+            let key = cache::cache_key(&text_hash, &engine_task, &voice_for_task, &language_for_task, speed_for_task);
             let path = cache::cache_path(&audio_dir, &key);
             if !path.exists() {
                 let req = serde_json::json!({
                     "text": text,
                     "engine": engine_task,
                     "voice": voice_for_task,
+                    "language": language_for_task,
+                    "speed": speed_for_task,
                     "cache_key": key,
                 });
                 match client
@@ -236,6 +251,21 @@ pub async fn play_cached_or_generate(
     page_id: String,
     voice_preset: String,
 ) -> Result<AudioChunk, String> {
+    // Resolve engine + voice + language + speed from user settings. The
+    // voice_preset argument from the UI takes precedence (lets the play
+    // button override the saved default for one-off playback), but the
+    // saved preset is the fallback.
+    let tts_settings = crate::reader::get_tts_settings(state.clone())
+        .unwrap_or_else(|_| crate::reader::TtsSettings::default());
+    let engine = tts_settings.engine.clone();
+    let voice = if voice_preset.is_empty() {
+        tts_settings.voice.clone()
+    } else {
+        voice_preset.clone()
+    };
+    let language = tts_settings.language.clone();
+    let speed = tts_settings.speed as f32;
+
     // Look up the page's text first.
     let (text, text_hash) = {
         let conn = state.db.lock();
@@ -247,8 +277,8 @@ pub async fn play_cached_or_generate(
         .map_err(|e| format!("page not found: {e}"))?
     };
 
-    let engine = state.sidecar.engine_for_platform().to_string();
-    let key = cache::cache_key(&text_hash, &engine, &voice_preset, "en", 1.0);
+    let engine_local = engine.clone();
+    let key = cache::cache_key(&text_hash, &engine_local, &voice, &language, speed);
     let _expected_path = cache::cache_path(&state.sidecar.audio_cache_dir(), &key);
 
     // Cache hit?
@@ -284,7 +314,9 @@ pub async fn play_cached_or_generate(
     let req = serde_json::json!({
         "text": text,
         "engine": engine,
-        "voice": voice_preset,
+        "voice": voice,
+        "language": language,
+        "speed": speed,
         "cache_key": key,
     });
     let resp = client
@@ -324,7 +356,7 @@ pub async fn play_cached_or_generate(
                 body.path,
                 body.duration_ms,
                 engine,
-                voice_preset,
+                voice,
                 text_hash,
                 now_secs()
             ],

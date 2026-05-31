@@ -14,6 +14,21 @@ from engine_base import Engine, NotReadyError
 
 DEFAULT_SAMPLE_RATE = 24000
 
+# Kokoro KPipeline uses a single-letter lang_code. Map our human-readable codes.
+LANG_CODE_MAP = {
+    "en": "a",       # American English (default)
+    "en-US": "a",
+    "en-GB": "b",    # British English
+    "zh": "z",       # Mandarin Chinese
+    "ja": "j",       # Japanese
+    "es": "e",       # Spanish
+    "fr": "f",       # French
+    "hi": "h",       # Hindi
+    "it": "i",       # Italian
+    "pt-BR": "p",    # Brazilian Portuguese
+    "pt": "p",
+}
+
 
 class KokoroEngine(Engine):
     name = "kokoro"
@@ -21,38 +36,18 @@ class KokoroEngine(Engine):
     def __init__(self, model_path: Optional[str] = None) -> None:
         self._model_path = model_path
         self._pipeline = None
+        self._pipeline_lang: Optional[str] = None
         self._sample_rate = DEFAULT_SAMPLE_RATE
 
     def load(self) -> None:
-        if self._pipeline is not None:
-            return
-        model_path = self._model_path or self._discover_model_path()
-        if not model_path or not Path(model_path).exists():
-            raise NotReadyError(
-                reason="model_path_missing",
-                message=f"Kokoro model not found at {model_path}",
-                paths=[model_path or ""],
-            )
-        if Path(model_path).stat().st_size < 1024:
-            raise NotReadyError(
-                reason="model_lfs_pointer",
-                message=f"Kokoro model at {model_path} looks like an LFS pointer — run `git lfs pull`.",
-                paths=[model_path],
-            )
-        try:
-            # Heavy imports happen here, not at module top.
-            from kokoro import KPipeline  # type: ignore
-
-            # 'a' = American English by default; UI can override later.
-            self._pipeline = KPipeline(lang_code="a", repo_id=str(Path(model_path).parent))
-        except ImportError as exc:
-            raise NotReadyError(
-                reason="kokoro_not_installed",
-                message=f"Install macos/sidecar-env requirements: {exc}",
-            ) from exc
+        # Lazy: real pipeline construction happens on the first synth call,
+        # which is when we also know the target language. This call is a
+        # cheap "yes, I'm ready to be asked" probe.
+        return
 
     def unload(self) -> None:
         self._pipeline = None
+        self._pipeline_lang = None
 
     def synthesize(
         self,
@@ -63,8 +58,11 @@ class KokoroEngine(Engine):
         language: str = "en",
         speed: float = 1.0,
     ) -> int:
-        if self._pipeline is None:
-            self.load()
+        # Rebuild the pipeline if the language changed — KPipeline binds the
+        # phonemizer at construction time.
+        lang_code = LANG_CODE_MAP.get(language, "a")
+        if self._pipeline is None or self._pipeline_lang != lang_code:
+            self._build_pipeline(lang_code)
         assert self._pipeline is not None
         import numpy as np  # lazy: numpy only needed when we actually synthesize
 
@@ -81,6 +79,26 @@ class KokoroEngine(Engine):
             wf.setframerate(self._sample_rate)
             wf.writeframes(pcm.tobytes())
         return int(len(audio) * 1000 / self._sample_rate)
+
+    def _build_pipeline(self, lang_code: str) -> None:
+        # Heavy imports happen here.
+        model_path = self._model_path or self._discover_model_path()
+        if not model_path or not Path(model_path).exists():
+            raise NotReadyError(
+                reason="model_path_missing",
+                message=f"Kokoro model not found at {model_path}",
+                paths=[model_path or ""],
+            )
+        try:
+            from kokoro import KPipeline  # type: ignore
+
+            self._pipeline = KPipeline(lang_code=lang_code, repo_id=str(Path(model_path).parent))
+            self._pipeline_lang = lang_code
+        except ImportError as exc:
+            raise NotReadyError(
+                reason="kokoro_not_installed",
+                message=f"Install macos/sidecar-env requirements: {exc}",
+            ) from exc
 
     @staticmethod
     def _discover_model_path() -> Optional[str]:

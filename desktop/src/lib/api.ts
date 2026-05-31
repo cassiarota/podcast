@@ -40,6 +40,32 @@ export interface ReaderSettings {
   brightness: number;
 }
 
+export interface TtsSettings {
+  engine: string;
+  voice: string;
+  language: string;
+  speed: number;
+}
+
+export interface LanguageInfo {
+  code: string;
+  label: string;
+}
+
+export interface VoiceInfo {
+  id: string;
+  label: string;
+  language: string;
+}
+
+export interface EngineInfo {
+  id: string;
+  label: string;
+  description: string;
+  languages: LanguageInfo[];
+  voices: VoiceInfo[];
+}
+
 export interface TtsJob {
   id: string;
   book_id: string;
@@ -96,6 +122,11 @@ export const api = {
     invoke("get_reader_settings"),
   saveReaderSettings: (settings: ReaderSettings): Promise<void> =>
     invoke("save_reader_settings", { settings }),
+
+  getTtsSettings: (): Promise<TtsSettings> => invoke("get_tts_settings"),
+  saveTtsSettings: (settings: TtsSettings): Promise<void> =>
+    invoke("save_tts_settings", { settings }),
+  listEngines: (): Promise<EngineInfo[]> => invoke("list_engines"),
 
   // M3+ TTS
   startTtsJob: (

@@ -128,6 +128,19 @@ python scripts/convert_kokoro_to_onnx.py
 - **亮度**：滑动条调节，作用在 UI 顶层暗化层，不改系统亮度
 - **目录**：弹出侧边栏，支持点击章节跳转
 - **▶ Play**：触发 TTS 播放当前页
+- **⚙ 设置**：进入完整设置页（也可从书架右上角进入）
+
+### 设置页
+
+书架右上角或阅读控制栏点 **⚙ 设置** 进入。可以配置：
+
+- **TTS 引擎**：Kokoro（推荐，多语言，CPU 即可）/ Qwen（Windows + CUDA）/ Stub（调试）
+- **语言**：Kokoro 支持 9 种，包括 **中文（Mandarin）**、英、日、西、法、印地、意、葡
+- **音色**：按语言过滤；中文有 8 个音色（`zf_xiaoxiao` 等女声 + `zm_yunxi` 等男声）
+- **语速**：0.5x – 1.5x
+- **字号 / 主题 / 亮度**：同上
+
+> Windows 用户：默认引擎是 Kokoro，**不需要** CUDA 也能用。只在你确实想要 Qwen 的特定音色时才需要走 [`windows/INSTALL_zh-CN.md`](windows/INSTALL_zh-CN.md) 的 Qwen 配置流程。
 
 ### TTS（文本转语音）
 

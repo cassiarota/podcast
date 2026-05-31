@@ -2,7 +2,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useLibraryStore } from "../state/library";
 import { useReaderStore } from "../state/reader";
 
-export function Library() {
+interface LibraryProps {
+  onOpenSettings: () => void;
+}
+
+export function Library({ onOpenSettings }: LibraryProps) {
   const books = useLibraryStore((s) => s.books);
   const importBook = useLibraryStore((s) => s.importBook);
   const openBook = useReaderStore((s) => s.open);
@@ -28,7 +32,12 @@ export function Library() {
 
   return (
     <div className="library">
-      <h1>Library</h1>
+      <div className="library-header">
+        <h1>Library</h1>
+        <button className="settings-button" onClick={onOpenSettings} title="设置">
+          ⚙ 设置
+        </button>
+      </div>
       {books.length === 0 && (
         <div className="empty-shelf">
           Your shelf is empty. Tap <em>Import a book</em> to begin.

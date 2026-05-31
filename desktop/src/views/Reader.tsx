@@ -7,9 +7,10 @@ const HIDE_DELAY_MS = 2200;
 
 interface ReaderProps {
   bookId: string;
+  onOpenSettings: () => void;
 }
 
-export function Reader({ bookId }: ReaderProps) {
+export function Reader({ bookId, onOpenSettings }: ReaderProps) {
   const open = useReaderStore((s) => s.open);
   const close = useReaderStore((s) => s.close);
   const next = useReaderStore((s) => s.next);
@@ -64,6 +65,7 @@ export function Reader({ bookId }: ReaderProps) {
       <div className={`controls ${controlsVisible ? "" : "hidden"}`}>
         <button onClick={close}>← Library</button>
         <button onClick={() => setTocOpen(true)}>Contents</button>
+        <button onClick={onOpenSettings}>⚙ 设置</button>
         <label>
           Font
           <select
@@ -136,7 +138,7 @@ function PlayButton() {
             const chunk = await api.playCachedOrGenerate(
               page.book_id,
               page.id,
-              "default"
+              "" // empty → backend reads saved TtsSettings.voice
             );
             const { convertFileSrc } = await import("@tauri-apps/api/core");
             const url = convertFileSrc(chunk.path);

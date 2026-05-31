@@ -54,6 +54,62 @@ pub struct ReaderSettings {
     pub brightness: f64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TtsSettings {
+    pub engine: String,
+    pub voice: String,
+    pub language: String,
+    pub speed: f64,
+}
+
+impl Default for TtsSettings {
+    fn default() -> Self {
+        Self {
+            engine: default_engine().to_string(),
+            voice: default_voice_for("kokoro").to_string(),
+            language: "en".into(),
+            speed: 1.0,
+        }
+    }
+}
+
+fn default_engine() -> &'static str {
+    // Sensible default: Kokoro everywhere. Windows users who want Qwen can
+    // switch in Settings. This was previously hardcoded to qwen on Windows,
+    // but Kokoro avoids the CUDA install pain and supports Chinese.
+    "kokoro"
+}
+
+pub fn default_voice_for(engine: &str) -> &'static str {
+    match engine {
+        "kokoro" => "af_heart",
+        "qwen" => "default",
+        _ => "default",
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct EngineInfo {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub languages: Vec<LanguageInfo>,
+    pub voices: Vec<VoiceInfo>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LanguageInfo {
+    pub code: String,
+    pub label: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceInfo {
+    pub id: String,
+    pub label: String,
+    pub language: String,
+}
+
 #[tauri::command]
 pub fn import_book(
     state: State<AppState>,
@@ -263,6 +319,141 @@ pub fn save_reader_settings(
     Ok(())
 }
 
+#[tauri::command]
+pub fn get_tts_settings(state: State<AppState>) -> Result<TtsSettings, String> {
+    let conn = state.db.lock();
+    let value: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'tts'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(match value {
+        Some(v) => serde_json::from_str::<TtsSettings>(&v).unwrap_or_default(),
+        None => TtsSettings::default(),
+    })
+}
+
+#[tauri::command]
+pub fn save_tts_settings(
+    state: State<AppState>,
+    settings: TtsSettings,
+) -> Result<(), String> {
+    let json = serde_json::to_string(&settings).map_err(|e| e.to_string())?;
+    let conn = state.db.lock();
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('tts', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![json],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_engines() -> Result<Vec<EngineInfo>, String> {
+    Ok(vec![
+        EngineInfo {
+            id: "kokoro".into(),
+            label: "Kokoro 82M".into(),
+            description: "本地 CPU 运行，多语言（含中文）。推荐。".into(),
+            languages: kokoro_languages(),
+            voices: kokoro_voices(),
+        },
+        EngineInfo {
+            id: "qwen".into(),
+            label: "Qwen TTS (Windows + CUDA)".into(),
+            description: "仅 Windows + NVIDIA GPU。需手动放置 D:\\models\\Qwen3-TTS-*".into(),
+            languages: vec![
+                LanguageInfo { code: "en".into(), label: "English".into() },
+                LanguageInfo { code: "zh".into(), label: "中文 (Mandarin)".into() },
+            ],
+            voices: vec![
+                VoiceInfo { id: "default".into(), label: "Default".into(), language: "en".into() },
+            ],
+        },
+        EngineInfo {
+            id: "stub".into(),
+            label: "Stub (调试)".into(),
+            description: "正弦波合成，仅用于打通流程和离线演示。".into(),
+            languages: vec![
+                LanguageInfo { code: "en".into(), label: "English".into() },
+            ],
+            voices: vec![
+                VoiceInfo { id: "default".into(), label: "Default".into(), language: "en".into() },
+            ],
+        },
+    ])
+}
+
+fn kokoro_languages() -> Vec<LanguageInfo> {
+    vec![
+        LanguageInfo { code: "en".into(), label: "English (American)".into() },
+        LanguageInfo { code: "en-GB".into(), label: "English (British)".into() },
+        LanguageInfo { code: "zh".into(), label: "中文 (Mandarin)".into() },
+        LanguageInfo { code: "ja".into(), label: "日本語".into() },
+        LanguageInfo { code: "es".into(), label: "Español".into() },
+        LanguageInfo { code: "fr".into(), label: "Français".into() },
+        LanguageInfo { code: "hi".into(), label: "हिन्दी".into() },
+        LanguageInfo { code: "it".into(), label: "Italiano".into() },
+        LanguageInfo { code: "pt-BR".into(), label: "Português (Brasil)".into() },
+    ]
+}
+
+fn kokoro_voices() -> Vec<VoiceInfo> {
+    let voices = [
+        // American English (female)
+        ("af_heart", "Heart", "en"), ("af_bella", "Bella", "en"),
+        ("af_sky", "Sky", "en"), ("af_sarah", "Sarah", "en"),
+        ("af_nicole", "Nicole", "en"), ("af_nova", "Nova", "en"),
+        ("af_river", "River", "en"), ("af_alloy", "Alloy", "en"),
+        ("af_aoede", "Aoede", "en"), ("af_jessica", "Jessica", "en"),
+        ("af_kore", "Kore", "en"),
+        // American English (male)
+        ("am_adam", "Adam", "en"), ("am_echo", "Echo", "en"),
+        ("am_eric", "Eric", "en"), ("am_fenrir", "Fenrir", "en"),
+        ("am_liam", "Liam", "en"), ("am_michael", "Michael", "en"),
+        ("am_onyx", "Onyx", "en"), ("am_puck", "Puck", "en"),
+        ("am_santa", "Santa", "en"),
+        // British English
+        ("bf_alice", "Alice", "en-GB"), ("bf_emma", "Emma", "en-GB"),
+        ("bf_isabella", "Isabella", "en-GB"), ("bf_lily", "Lily", "en-GB"),
+        ("bm_daniel", "Daniel", "en-GB"), ("bm_fable", "Fable", "en-GB"),
+        ("bm_george", "George", "en-GB"), ("bm_lewis", "Lewis", "en-GB"),
+        // Mandarin Chinese
+        ("zf_xiaobei", "晓贝", "zh"), ("zf_xiaoni", "晓妮", "zh"),
+        ("zf_xiaoxiao", "晓晓", "zh"), ("zf_xiaoyi", "晓伊", "zh"),
+        ("zm_yunjian", "云健", "zh"), ("zm_yunxi", "云希", "zh"),
+        ("zm_yunxia", "云夏", "zh"), ("zm_yunyang", "云扬", "zh"),
+        // Japanese
+        ("jf_alpha", "Alpha", "ja"), ("jf_gongitsune", "Gongitsune", "ja"),
+        ("jf_nezumi", "Nezumi", "ja"), ("jf_tebukuro", "Tebukuro", "ja"),
+        ("jm_kumo", "Kumo", "ja"),
+        // Spanish
+        ("ef_dora", "Dora", "es"), ("em_alex", "Alex", "es"), ("em_santa", "Santa", "es"),
+        // French
+        ("ff_siwis", "Siwis", "fr"),
+        // Hindi
+        ("hf_alpha", "Alpha", "hi"), ("hf_beta", "Beta", "hi"),
+        ("hm_omega", "Omega", "hi"), ("hm_psi", "Psi", "hi"),
+        // Italian
+        ("if_sara", "Sara", "it"), ("im_nicola", "Nicola", "it"),
+        // Brazilian Portuguese
+        ("pf_dora", "Dora", "pt-BR"), ("pm_alex", "Alex", "pt-BR"),
+        ("pm_santa", "Santa", "pt-BR"),
+    ];
+    voices
+        .iter()
+        .map(|(id, label, lang)| VoiceInfo {
+            id: (*id).to_string(),
+            label: (*label).to_string(),
+            language: (*lang).to_string(),
+        })
+        .collect()
+}
+
 fn load_book(conn: &rusqlite::Connection, book_id: &str) -> Result<Book> {
     let book = conn.query_row(
         "SELECT id, title, author, source_format, page_count, created_at FROM books WHERE id = ?1",
@@ -279,4 +470,57 @@ fn load_book(conn: &rusqlite::Connection, book_id: &str) -> Result<Book> {
         },
     )?;
     Ok(book)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tts_settings_defaults_are_sensible() {
+        let s = TtsSettings::default();
+        assert_eq!(s.engine, "kokoro");
+        assert_eq!(s.voice, "af_heart");
+        assert_eq!(s.language, "en");
+        assert!((s.speed - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn tts_settings_json_roundtrip() {
+        let s = TtsSettings {
+            engine: "qwen".into(),
+            voice: "default".into(),
+            language: "zh".into(),
+            speed: 1.25,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: TtsSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.engine, "qwen");
+        assert_eq!(back.language, "zh");
+        assert!((back.speed - 1.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn default_voice_for_returns_sensible_values() {
+        assert_eq!(default_voice_for("kokoro"), "af_heart");
+        assert_eq!(default_voice_for("qwen"), "default");
+        assert_eq!(default_voice_for("anything-else"), "default");
+    }
+
+    #[test]
+    fn kokoro_voices_include_chinese_options() {
+        let voices = kokoro_voices();
+        let chinese: Vec<_> = voices.iter().filter(|v| v.language == "zh").collect();
+        assert!(chinese.len() >= 8, "expected ≥8 Chinese voices, got {}", chinese.len());
+        assert!(chinese.iter().any(|v| v.id == "zf_xiaoxiao"));
+        assert!(chinese.iter().any(|v| v.id == "zm_yunxi"));
+    }
+
+    #[test]
+    fn kokoro_languages_include_chinese() {
+        let langs = kokoro_languages();
+        assert!(langs.iter().any(|l| l.code == "zh"));
+        assert!(langs.iter().any(|l| l.code == "en"));
+        assert!(langs.iter().any(|l| l.code == "ja"));
+    }
 }

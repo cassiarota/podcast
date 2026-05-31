@@ -19,7 +19,13 @@ body {
   background-repeat: repeat-y;
   background-size: 100% auto;
 }
-.library h1 { margin: 0 0 24px; font-size: 28px; }
+.library-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.library h1 { margin: 0; font-size: 28px; flex: 1; }
+.settings-button {
+  background: rgba(0,0,0,0.5); color: #f5e6d3; border: 1px solid rgba(255,255,255,0.3);
+  padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 14px;
+}
+.settings-button:hover { background: rgba(0,0,0,0.7); }
 .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 24px 18px; padding-bottom: 100px; }
 .book-tile {
   cursor: pointer; height: 200px; padding: 14px 12px;
@@ -76,3 +82,45 @@ body {
 .toc ul { list-style: none; padding: 0; margin: 0; }
 .toc li { padding: 8px 4px; cursor: pointer; border-bottom: 1px solid #333; }
 .toc li:hover { background: #2a2a2a; }
+
+/* Settings view */
+.settings-view {
+  height: 100vh; overflow-y: auto;
+  background: #1f1f1f; color: #e8e8e8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.settings-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px 32px; border-bottom: 1px solid #333;
+  background: #181818;
+  position: sticky; top: 0; z-index: 5;
+}
+.settings-header h1 { margin: 0; font-size: 20px; }
+.settings-header button {
+  background: #2a2a2a; color: #eee; border: 1px solid #444;
+  padding: 6px 14px; border-radius: 4px; cursor: pointer;
+}
+.settings-header button:hover { background: #333; }
+.settings-body { padding: 24px 48px 80px; max-width: 720px; }
+.settings-section {
+  margin-bottom: 32px; padding: 20px;
+  background: #262626; border-radius: 8px;
+}
+.settings-section h2 { margin: 0 0 8px; font-size: 16px; color: #fff; }
+.settings-hint { color: #aaa; font-size: 13px; margin: 0 0 16px; }
+.settings-row {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 10px 0; border-bottom: 1px solid #333;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row label {
+  flex: 0 0 96px; font-size: 14px; color: #ccc;
+  padding-top: 4px;
+}
+.settings-control { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.settings-control select, .settings-control input[type="range"] {
+  background: #1a1a1a; color: #eee; border: 1px solid #444;
+  padding: 6px 8px; border-radius: 4px; max-width: 360px;
+}
+.settings-control input[type="range"] { padding: 0; }
+.settings-meta { color: #888; font-size: 12px; }

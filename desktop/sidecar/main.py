@@ -118,9 +118,15 @@ def make_app(state: State) -> FastAPI:
     @app.post("/tts/realtime")
     def synth(req: SynthRequest):
         state.touch()
-        if req.engine and req.engine != state.engine_name:
-            # We honor the platform default, but log mismatches.
-            logger.info("client requested engine=%s, sidecar configured for %s", req.engine, state.engine_name)
+        # Honor the per-request engine override — this is how the Settings
+        # view's engine choice flows down. Swap engines if needed.
+        requested = req.engine or state.engine_name
+        if state.engine is not None and state.engine.name != requested:
+            logger.info("engine swap: %s -> %s", state.engine.name, requested)
+            state.unload()
+            state.engine_name = requested
+        elif state.engine_name != requested:
+            state.engine_name = requested
         try:
             engine = state.ensure_engine()
         except NotReadyError as exc:
