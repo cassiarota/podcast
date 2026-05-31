@@ -58,6 +58,21 @@ export function Settings({ onClose }: SettingsProps) {
     updateTts({ language: lang, voice });
   };
 
+  /**
+   * When the user picks a voice directly, sync `language` to match the
+   * voice's language metadata. Without this the engine would use the
+   * stale language for phonemizing (e.g. English phonemizer on Chinese
+   * text → espeak reads every codepoint as "Chinese letter").
+   */
+  const onVoiceChange = (voiceId: string) => {
+    const v = currentEngine?.voices.find((x) => x.id === voiceId);
+    if (!v) {
+      updateTts({ voice: voiceId });
+      return;
+    }
+    updateTts({ voice: voiceId, language: v.language });
+  };
+
   return (
     <div className="settings-view">
       <div className="settings-header">
@@ -121,7 +136,7 @@ export function Settings({ onClose }: SettingsProps) {
           <Row label={t("settings.tts.voice")}>
             <select
               value={tts.voice}
-              onChange={(e) => updateTts({ voice: e.target.value })}
+              onChange={(e) => onVoiceChange(e.target.value)}
               disabled={filteredVoices.length === 0}
             >
               {filteredVoices.length === 0 && (

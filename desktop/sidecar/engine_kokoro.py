@@ -29,6 +29,33 @@ LANG_CODE_MAP = {
     "pt": "p",
 }
 
+# Kokoro voice IDs encode the language as a one-letter prefix before the
+# gender letter, e.g. `zf_xiaoxiao` = Mandarin Female, `af_heart` = American
+# English Female. We trust the voice prefix OVER the `language` field — a
+# Chinese voice with a stale `language=en` (the original UI default) must
+# still go through the Chinese phonemizer, otherwise espeak's English mode
+# verbalizes every codepoint as "Chinese letter, Chinese letter, ..."
+VOICE_PREFIX_LANG = {
+    "a": "a",  # American English
+    "b": "b",  # British English
+    "z": "z",  # Mandarin Chinese
+    "j": "j",  # Japanese
+    "e": "e",  # Spanish
+    "f": "f",  # French
+    "h": "h",  # Hindi
+    "i": "i",  # Italian
+    "p": "p",  # Brazilian Portuguese
+}
+
+
+def _resolve_lang_code(voice: str, language: str) -> str:
+    """Voice prefix beats the language field. Defaults to American English."""
+    if voice and len(voice) >= 2 and voice[1] in {"f", "m"}:
+        prefix = voice[0]
+        if prefix in VOICE_PREFIX_LANG:
+            return VOICE_PREFIX_LANG[prefix]
+    return LANG_CODE_MAP.get(language, "a")
+
 
 class KokoroEngine(Engine):
     name = "kokoro"
@@ -60,7 +87,7 @@ class KokoroEngine(Engine):
     ) -> int:
         # Rebuild the pipeline if the language changed — KPipeline binds the
         # phonemizer at construction time.
-        lang_code = LANG_CODE_MAP.get(language, "a")
+        lang_code = _resolve_lang_code(voice, language)
         if self._pipeline is None or self._pipeline_lang != lang_code:
             self._build_pipeline(lang_code)
         assert self._pipeline is not None
