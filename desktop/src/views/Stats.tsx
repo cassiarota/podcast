@@ -184,8 +184,8 @@ function DailyHeatmap({ daily }: { daily: DailyStat[] }) {
             style={{
               backgroundColor:
                 value === 0
-                  ? "rgba(255,255,255,0.05)"
-                  : `rgba(42,111,74,${intensity.toFixed(2)})`,
+                  ? "rgba(245, 230, 211, 0.06)"
+                  : `rgba(184, 120, 62, ${intensity.toFixed(2)})`,
             }}
             title={tooltip}
           />
