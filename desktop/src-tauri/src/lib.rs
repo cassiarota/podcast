@@ -144,13 +144,22 @@ async fn preload_engine(
     let url = format!("http://127.0.0.1:{port}/tts/realtime");
     // Pick a short text in whatever language the user has saved. This
     // triggers KPipeline construction for that lang_code.
-    let warm_text = if tts.language.starts_with("zh") || tts.voice.starts_with('z') {
+    let warm_base = if tts.language.starts_with("zh") || tts.voice.starts_with('z') {
         "你好"
     } else if tts.language.starts_with("ja") || tts.voice.starts_with('j') {
         "こんにちは"
     } else {
         "Hello"
     };
+    // Suffix the text with a per-launch nonce so the sidecar's WAV cache
+    // doesn't short-circuit the preload back to "already done in 5 ms".
+    // Without this the second app launch hits the cached file from the
+    // first run and never actually constructs the KPipeline.
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let warm_text = format!("{warm_base} preload-{nonce}");
     let req = serde_json::json!({
         "text": warm_text,
         "engine": "kokoro",
