@@ -125,6 +125,9 @@ interface Messages {
   "settings.reading.menuAutoHide": string;
   "settings.reading.menuAutoHide.on": string;
   "settings.reading.menuAutoHide.off": string;
+  "settings.reading.autoPageTurn": string;
+  "settings.reading.autoPageTurn.on": string;
+  "settings.reading.autoPageTurn.off": string;
   "settings.about": string;
   "settings.about.kokoroNote": string;
 
@@ -251,6 +254,9 @@ const ZH: Messages = {
   "settings.reading.menuAutoHide": "菜单自动隐藏",
   "settings.reading.menuAutoHide.on": "2 秒后自动隐藏",
   "settings.reading.menuAutoHide.off": "点击外部区域才隐藏",
+  "settings.reading.autoPageTurn": "自动翻页",
+  "settings.reading.autoPageTurn.on": "音频播完自动翻下一页并继续播放",
+  "settings.reading.autoPageTurn.off": "音频播完停止，等待手动操作",
   "settings.about": "关于",
   "settings.about.kokoroNote": "Kokoro 支持 9 种语言（含中文 Mandarin）。Windows 用户如果不想配置 CUDA，建议直接选 Kokoro。",
 
@@ -376,6 +382,9 @@ const EN: Messages = {
   "settings.reading.menuAutoHide": "Auto-hide menu",
   "settings.reading.menuAutoHide.on": "Hide after 2 s",
   "settings.reading.menuAutoHide.off": "Tap outside to hide",
+  "settings.reading.autoPageTurn": "Auto page turn",
+  "settings.reading.autoPageTurn.on": "Audio ends → advance and continue",
+  "settings.reading.autoPageTurn.off": "Audio ends → stop and wait",
   "settings.about": "About",
   "settings.about.kokoroNote": "Kokoro supports 9 languages (including Mandarin). Windows users who don't want to set up CUDA can pick Kokoro instead of Qwen.",
 

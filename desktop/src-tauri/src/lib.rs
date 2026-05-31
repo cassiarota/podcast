@@ -149,15 +149,15 @@ async fn preload_engine(
 
     let port = sidecar.port();
     let url = format!("http://127.0.0.1:{port}/tts/realtime");
-    // Pick a short text in whatever language the user has saved. This
-    // triggers KPipeline construction for that lang_code.
-    let warm_base = if tts.language.starts_with("zh") || tts.voice.starts_with('z') {
-        "你好"
-    } else if tts.language.starts_with("ja") || tts.voice.starts_with('j') {
-        "こんにちは"
-    } else {
-        "Hello"
-    };
+
+    // Smarter language picker: sniff the most-recently-accessed book and
+    // preload THAT language, not whatever's saved in TtsSettings. The user
+    // typically reads in one language at a time, and the auto-detect at
+    // /tts/realtime will rewrite the voice to a CJK one anyway — so by
+    // preloading the same target we avoid a cold-start the moment they
+    // hit ▶ Play.
+    let (warm_voice, warm_language, warm_base) = pick_preload_target(&app, &tts);
+
     // Suffix the text with a per-launch nonce so the sidecar's WAV cache
     // doesn't short-circuit the preload back to "already done in 5 ms".
     // Without this the second app launch hits the cached file from the
@@ -170,19 +170,83 @@ async fn preload_engine(
     let req = serde_json::json!({
         "text": warm_text,
         "engine": "kokoro",
-        "voice": tts.voice,
-        "language": tts.language,
+        "voice": warm_voice,
+        "language": warm_language,
         "speed": tts.speed,
     });
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         .build()
         .unwrap();
-    tracing::info!("tts preload: warming voice={} lang={}", tts.voice, tts.language);
+    tracing::info!("tts preload: warming voice={} lang={}", warm_voice, warm_language);
     match client.post(&url).json(&req).send().await {
         Ok(r) if r.status().is_success() => tracing::info!("tts preload: engine warm"),
         Ok(r) => tracing::warn!("tts preload non-success: {}", r.status()),
         Err(e) => tracing::warn!("tts preload request: {e}"),
     }
     Ok(())
+}
+
+/// Decide what (voice, language, sample-text) to warm based on the user's
+/// actual library content. The auto-detect at /tts/realtime rewrites voice
+/// to a Chinese one when the page is mostly CJK, so for a Chinese book the
+/// preload should construct the Chinese KPipeline — otherwise the user's
+/// first ▶ Play still pays the misaki[zh] init cost.
+///
+/// Strategy:
+///   1. Try the first page of the most recently opened book (reading_positions
+///      sorted by updated_at desc).
+///   2. Fall back to the first page of ANY book in the library.
+///   3. If no book exists, use the user's saved voice/language.
+fn pick_preload_target(
+    app: &tauri::AppHandle,
+    tts: &crate::reader::TtsSettings,
+) -> (String, String, &'static str) {
+    use tauri::Manager;
+
+    let state = app.state::<AppState>();
+    let conn = state.db.lock();
+
+    // Step 1 + 2: find a candidate page text.
+    let text: Option<String> = conn
+        .query_row(
+            "SELECT p.content
+             FROM pages p
+             WHERE p.book_id = (
+                 SELECT book_id FROM reading_positions ORDER BY updated_at DESC LIMIT 1
+             )
+             ORDER BY p.page_index ASC
+             LIMIT 1",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+        .or_else(|| {
+            conn.query_row(
+                "SELECT content FROM pages ORDER BY page_index ASC LIMIT 1",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .ok()
+        });
+
+    drop(conn);
+
+    if let Some(t) = text {
+        if crate::tts::is_predominantly_chinese(&t) {
+            return ("zf_xiaoxiao".to_string(), "zh".to_string(), "你好");
+        }
+    }
+
+    // No CJK content (or empty library). Honor the saved settings — they
+    // already determine which English / Japanese / Spanish / ... voice to
+    // warm. Default to American English.
+    let warm_base = if tts.language.starts_with("zh") || tts.voice.starts_with('z') {
+        "你好"
+    } else if tts.language.starts_with("ja") || tts.voice.starts_with('j') {
+        "こんにちは"
+    } else {
+        "Hello"
+    };
+    (tts.voice.clone(), tts.language.clone(), warm_base)
 }

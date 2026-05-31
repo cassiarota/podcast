@@ -62,6 +62,32 @@ function ensureAudio(set: (p: Partial<PlayerState>) => void): HTMLAudioElement {
   a.addEventListener("ended", () => {
     closePlayingSession();
     set({ status: "idle", positionMs: 0 });
+    // Auto-advance: when the page audio finishes, optionally turn the page
+    // and play the next one. This is what makes the app behave like a real
+    // audiobook reader. Lives in the player layer so it works regardless of
+    // whether the Reader view is mounted (a non-issue today but cheap to
+    // keep robust).
+    try {
+      // Defer-import to avoid a top-level circular dep with state/settings
+      // and state/reader.
+      import("./settings").then(async ({ useSettingsStore }) => {
+        const settings = useSettingsStore.getState().settings;
+        if (!settings.autoPageTurn) return;
+        const { useReaderStore } = await import("./reader");
+        const reader = useReaderStore.getState();
+        if (!reader.openBookId) return;
+        if (reader.pageIndex >= reader.pageCount - 1) return;
+        await reader.next();
+        const next = useReaderStore.getState().currentPage;
+        const bookId = useReaderStore.getState().openBookId;
+        if (next && bookId) {
+          // Re-enter play() to trigger fetch/cache + audio.play() chain.
+          await get().play(bookId, next.id);
+        }
+      });
+    } catch (e) {
+      console.warn("[player] auto-advance failed", e);
+    }
   });
   a.addEventListener("error", () => {
     closePlayingSession();

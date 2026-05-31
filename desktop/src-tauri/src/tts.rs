@@ -583,7 +583,7 @@ fn voice_prefix(voice: &str) -> Option<char> {
 
 /// Returns true if at least 30% of the letter-bearing characters in `text`
 /// are CJK ideographs.
-fn is_predominantly_chinese(text: &str) -> bool {
+pub fn is_predominantly_chinese(text: &str) -> bool {
     let mut total = 0usize;
     let mut cjk = 0usize;
     for ch in text.chars() {

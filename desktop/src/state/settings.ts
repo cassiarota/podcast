@@ -15,6 +15,7 @@ const defaults: ReaderSettings = {
   uiLanguage: "zh",
   pageTurnMode: "tap",
   menuAutoHide: false,
+  autoPageTurn: true,
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

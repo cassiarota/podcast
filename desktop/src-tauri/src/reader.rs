@@ -65,11 +65,16 @@ pub struct ReaderSettings {
     /// Whether the controls overlay should auto-hide after a delay.
     #[serde(rename = "menuAutoHide", default = "default_menu_auto_hide")]
     pub menu_auto_hide: bool,
+    /// When audio finishes for the current page, automatically advance and
+    /// continue playback. Off by default to avoid surprises.
+    #[serde(rename = "autoPageTurn", default = "default_auto_page_turn")]
+    pub auto_page_turn: bool,
 }
 
 fn default_ui_language() -> String { "zh".into() }
 fn default_page_turn_mode() -> String { "tap".into() }
 fn default_menu_auto_hide() -> bool { false }
+fn default_auto_page_turn() -> bool { true }
 
 impl Default for ReaderSettings {
     fn default() -> Self {
@@ -81,6 +86,7 @@ impl Default for ReaderSettings {
             ui_language: default_ui_language(),
             page_turn_mode: default_page_turn_mode(),
             menu_auto_hide: default_menu_auto_hide(),
+            auto_page_turn: default_auto_page_turn(),
         }
     }
 }

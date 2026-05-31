@@ -46,6 +46,8 @@ export interface ReaderSettings {
   pageTurnMode: "tap" | "swipe";
   /** When true the bottom controls auto-hide after 2 s of inactivity. */
   menuAutoHide: boolean;
+  /** When audio finishes on a page, auto-advance + continue playing. */
+  autoPageTurn: boolean;
 }
 
 export interface TtsSettings {

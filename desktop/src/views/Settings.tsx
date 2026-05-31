@@ -325,6 +325,18 @@ export function Settings({ onClose }: SettingsProps) {
               <option value="on">{t("settings.reading.menuAutoHide.on")}</option>
             </select>
           </Row>
+
+          <Row label={t("settings.reading.autoPageTurn")}>
+            <select
+              value={reader.autoPageTurn ? "on" : "off"}
+              onChange={(e) =>
+                updateReader({ autoPageTurn: e.target.value === "on" })
+              }
+            >
+              <option value="on">{t("settings.reading.autoPageTurn.on")}</option>
+              <option value="off">{t("settings.reading.autoPageTurn.off")}</option>
+            </select>
+          </Row>
         </section>
 
         <section className="settings-section">

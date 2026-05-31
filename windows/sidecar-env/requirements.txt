@@ -1,13 +1,33 @@
-# Qwen TTS sidecar deps (Windows + CUDA only)
+# 随身听 — Windows TTS sidecar deps (Kokoro CPU, no CUDA needed).
+#
+# For Qwen + CUDA setup see the bottom of this file. Kokoro is the
+# recommended path: it works on any Windows box without a NVIDIA GPU
+# and supports 8 languages including Mandarin.
+
+# FastAPI service framework
 fastapi>=0.115
 uvicorn>=0.32
 pydantic>=2.9
-numpy>=1.26
+
+# Audio output. numpy < 2 keeps the install compatible with older torch
+# wheels — on Windows x86_64 PyPI ships up to torch 2.5+ so the upper
+# bound is permissive.
+numpy>=1.26,<2
 soundfile>=0.12
 
-# CUDA build of PyTorch — adjust the index URL to match the host driver.
-# pip install --index-url https://download.pytorch.org/whl/cu121 torch
-torch>=2.4
+# Kokoro core
+kokoro>=0.9
 
-# Qwen TTS package
-qwen-tts>=0.1
+# transformers v4.x is the lowest common denominator across torch versions.
+transformers>=4.40,<5
+
+# misaki = Kokoro's text → phoneme frontend.
+misaki[zh]>=0.9   # Chinese (Mandarin) — adds jieba + pypinyin + cn2an
+misaki[ja]>=0.9   # Japanese — adds pyopenjtalk
+
+# --- Optional: Qwen TTS (requires NVIDIA CUDA GPU) ---
+# Uncomment if you want the Windows Qwen path instead. Note: torch must be
+# the CUDA build, so install separately first:
+#   pip install --index-url https://download.pytorch.org/whl/cu121 torch
+# torch>=2.4
+# qwen-tts>=0.1
