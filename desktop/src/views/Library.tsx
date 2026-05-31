@@ -9,11 +9,12 @@ import { BookActionModal } from "./BookActionModal";
 
 interface LibraryProps {
   onOpenSettings: () => void;
+  onOpenStats: () => void;
 }
 
 const LONG_PRESS_MS = 500;
 
-export function Library({ onOpenSettings }: LibraryProps) {
+export function Library({ onOpenSettings, onOpenStats }: LibraryProps) {
   const t = useT();
   const books = useLibraryStore((s) => s.books);
   const importBook = useLibraryStore((s) => s.importBook);
@@ -77,6 +78,9 @@ export function Library({ onOpenSettings }: LibraryProps) {
             {t("library.select")}
           </button>
         )}
+        <button className="settings-button" onClick={onOpenStats}>
+          {t("library.stats")}
+        </button>
         <button className="settings-button" onClick={onOpenSettings} title={t("reader.settings")}>
           {t("reader.settings")}
         </button>

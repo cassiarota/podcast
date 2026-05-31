@@ -3,6 +3,7 @@ import { useReaderStore } from "../state/reader";
 import { useSettingsStore } from "../state/settings";
 import { usePlayerStore } from "../state/player";
 import { useT } from "../lib/i18n";
+import { useReadingSession } from "../lib/sessions";
 import { TOC } from "./TOC";
 
 const AUTO_HIDE_MS = 2200;
@@ -32,6 +33,9 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
   const updateSettings = useSettingsStore((s) => s.update);
 
   const hideTimerRef = useRef<number | null>(null);
+
+  // Stats: tracks how long this book has been open in the reader.
+  useReadingSession(bookId);
 
   useEffect(() => {
     open(bookId);

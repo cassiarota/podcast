@@ -20,6 +20,33 @@ interface PlayerState {
 
 let audio: HTMLAudioElement | null = null;
 let posTimer: number | null = null;
+// Active "playing" session id from the stats backend. We open one when the
+// user hits ▶ Play and close it on stop / ended / new book, so the Stats
+// page reflects real listening time per book.
+let playingSessionId: string | null = null;
+let playingForBook: string | null = null;
+
+async function ensurePlayingSession(bookId: string) {
+  if (playingSessionId && playingForBook === bookId) return;
+  if (playingSessionId) {
+    api.endSession(playingSessionId).catch(() => {});
+    playingSessionId = null;
+  }
+  try {
+    playingSessionId = await api.startSession("playing", bookId);
+    playingForBook = bookId;
+  } catch (e) {
+    console.warn("[stats] startSession playing failed", e);
+  }
+}
+
+function closePlayingSession() {
+  if (!playingSessionId) return;
+  const id = playingSessionId;
+  playingSessionId = null;
+  playingForBook = null;
+  api.endSession(id).catch(() => {});
+}
 
 function ensureAudio(set: (p: Partial<PlayerState>) => void): HTMLAudioElement {
   if (audio) return audio;
@@ -32,8 +59,12 @@ function ensureAudio(set: (p: Partial<PlayerState>) => void): HTMLAudioElement {
     if (a.ended) set({ status: "idle", positionMs: 0 });
     else set({ status: "paused", positionMs: Math.round(a.currentTime * 1000) });
   });
-  a.addEventListener("ended", () => set({ status: "idle", positionMs: 0 }));
+  a.addEventListener("ended", () => {
+    closePlayingSession();
+    set({ status: "idle", positionMs: 0 });
+  });
   a.addEventListener("error", () => {
+    closePlayingSession();
     const code = a.error?.code;
     const msg = a.error?.message || `audio error code=${code}`;
     set({ status: "idle", error: msg });
@@ -61,6 +92,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   play: async (bookId: string, pageId: string) => {
     const a = ensureAudio(set);
     set({ status: "loading", bookId, pageId, error: null, positionMs: 0, durationMs: 0 });
+    void ensurePlayingSession(bookId);
     let chunk: AudioChunk;
     try {
       chunk = await api.playCachedOrGenerate(bookId, pageId, "");
@@ -94,6 +126,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
   },
   stop: () => {
+    closePlayingSession();
     if (!audio) {
       set({ status: "idle", bookId: null, pageId: null, positionMs: 0, durationMs: 0 });
       return;

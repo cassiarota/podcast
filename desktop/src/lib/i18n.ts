@@ -19,6 +19,7 @@ interface Messages {
   "library.select": string;
   "library.selectExit": string;
   "library.selected": string;
+  "library.stats": string;
   "library.actions.generateAudio": string;
   "library.actions.delete": string;
   "library.actions.viewToc": string;
@@ -90,6 +91,25 @@ interface Messages {
   "settings.storage.importsBackup.pick": string;
   "settings.storage.importsBackup.disabled": string;
   "settings.storage.importsBackup.clear": string;
+
+  // Stats
+  "stats.title": string;
+  "stats.mode.day": string;
+  "stats.mode.month": string;
+  "stats.heatmap.day": string;
+  "stats.heatmap.month": string;
+  "stats.perBook": string;
+  "stats.perBook.empty": string;
+  "stats.today": string;
+  "stats.totalReading": string;
+  "stats.totalPlaying": string;
+  "stats.totalApp": string;
+  "stats.booksListened": string;
+  "stats.booksRead": string;
+  "stats.book.title": string;
+  "stats.book.reading": string;
+  "stats.book.playing": string;
+  "stats.book.sessions": string;
   "settings.reading": string;
   "settings.reading.fontSize": string;
   "settings.reading.fontSize.small": string;
@@ -129,6 +149,7 @@ const ZH: Messages = {
   "library.select": "批量",
   "library.selectExit": "取消批量",
   "library.selected": "已选 {n}",
+  "library.stats": "📊 统计",
   "library.actions.generateAudio": "生成整本书音频",
   "library.actions.delete": "删除书籍",
   "library.actions.viewToc": "查看目录",
@@ -197,6 +218,24 @@ const ZH: Messages = {
   "settings.storage.importsBackup.pick": "选择目录…",
   "settings.storage.importsBackup.disabled": "（未设置 — 不保存额外副本）",
   "settings.storage.importsBackup.clear": "清除",
+
+  "stats.title": "使用统计",
+  "stats.mode.day": "按天",
+  "stats.mode.month": "按月",
+  "stats.heatmap.day": "最近 90 天",
+  "stats.heatmap.month": "最近 12 个月",
+  "stats.perBook": "按书统计",
+  "stats.perBook.empty": "暂无数据。打开一本书或开始播放后这里会有内容。",
+  "stats.today": "今天",
+  "stats.totalReading": "累计阅读",
+  "stats.totalPlaying": "累计播放",
+  "stats.totalApp": "累计使用",
+  "stats.booksListened": "听过的书",
+  "stats.booksRead": "读过的书",
+  "stats.book.title": "书名",
+  "stats.book.reading": "阅读",
+  "stats.book.playing": "播放",
+  "stats.book.sessions": "次数",
   "settings.reading": "阅读",
   "settings.reading.fontSize": "字号档位",
   "settings.reading.fontSize.small": "小",
@@ -235,6 +274,7 @@ const EN: Messages = {
   "library.select": "Select",
   "library.selectExit": "Cancel select",
   "library.selected": "{n} selected",
+  "library.stats": "📊 Stats",
   "library.actions.generateAudio": "Generate audio for whole book",
   "library.actions.delete": "Delete book",
   "library.actions.viewToc": "View contents",
@@ -303,6 +343,24 @@ const EN: Messages = {
   "settings.storage.importsBackup.pick": "Pick a folder…",
   "settings.storage.importsBackup.disabled": "(unset — no extra copy)",
   "settings.storage.importsBackup.clear": "Clear",
+
+  "stats.title": "Usage stats",
+  "stats.mode.day": "By day",
+  "stats.mode.month": "By month",
+  "stats.heatmap.day": "Last 90 days",
+  "stats.heatmap.month": "Last 12 months",
+  "stats.perBook": "Per-book breakdown",
+  "stats.perBook.empty": "Nothing yet. Open a book or hit play to fill this in.",
+  "stats.today": "Today",
+  "stats.totalReading": "Total reading",
+  "stats.totalPlaying": "Total playback",
+  "stats.totalApp": "Total in app",
+  "stats.booksListened": "Books listened",
+  "stats.booksRead": "Books read",
+  "stats.book.title": "Book",
+  "stats.book.reading": "Reading",
+  "stats.book.playing": "Playback",
+  "stats.book.sessions": "Sessions",
   "settings.reading": "Reading",
   "settings.reading.fontSize": "Font size preset",
   "settings.reading.fontSize.small": "Small",

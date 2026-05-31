@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { Library } from "./views/Library";
 import { Reader } from "./views/Reader";
 import { Settings } from "./views/Settings";
+import { StatsView } from "./views/Stats";
 import { JobsButton, JobsPanel } from "./views/JobsPanel";
 import { useLibraryStore } from "./state/library";
 import { useReaderStore } from "./state/reader";
 import { useSettingsStore } from "./state/settings";
 import { useTtsSettingsStore } from "./state/tts";
+import { useAppUsageSession } from "./lib/sessions";
 
 export function App() {
   const refreshBooks = useLibraryStore((s) => s.refresh);
@@ -15,6 +17,9 @@ export function App() {
   const settings = useSettingsStore((s) => s.settings);
   const loadTts = useTtsSettingsStore((s) => s.load);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+
+  useAppUsageSession();
 
   useEffect(() => {
     refreshBooks();
@@ -38,12 +43,17 @@ export function App() {
     <div className="app" lang={settings.uiLanguage}>
       <JobsButton />
       <JobsPanel />
-      {settingsOpen ? (
+      {statsOpen ? (
+        <StatsView onClose={() => setStatsOpen(false)} />
+      ) : settingsOpen ? (
         <Settings onClose={() => setSettingsOpen(false)} />
       ) : openBookId ? (
         <Reader bookId={openBookId} onOpenSettings={() => setSettingsOpen(true)} />
       ) : (
-        <Library onOpenSettings={() => setSettingsOpen(true)} />
+        <Library
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenStats={() => setStatsOpen(true)}
+        />
       )}
       <div
         className="dim-overlay"

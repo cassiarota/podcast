@@ -88,6 +88,21 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             key             TEXT PRIMARY KEY,
             value           TEXT NOT NULL
         );
+
+        -- Usage tracking: every span of time the user spends doing something
+        -- with the app. `kind` is "app" (foreground), "reading" (a book open
+        -- in the reader), or "playing" (audio actively playing). `book_id`
+        -- is null for kind="app".
+        CREATE TABLE IF NOT EXISTS usage_sessions (
+            id              TEXT PRIMARY KEY,
+            kind            TEXT NOT NULL,
+            book_id         TEXT,
+            started_at      INTEGER NOT NULL,
+            ended_at        INTEGER,
+            duration_ms     INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS usage_sessions_kind_day ON usage_sessions(kind, started_at);
+        CREATE INDEX IF NOT EXISTS usage_sessions_book ON usage_sessions(book_id);
         "#,
     )?;
     Ok(())

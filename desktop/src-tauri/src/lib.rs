@@ -4,6 +4,7 @@ pub mod import_epub;
 pub mod import_txt;
 pub mod reader;
 pub mod sidecar;
+pub mod stats;
 pub mod tts;
 
 use std::sync::Arc;
@@ -100,6 +101,12 @@ pub fn run() {
             tts::cancel_tts_job,
             tts::play_cached_or_generate,
             tts::get_tts_status,
+            stats::start_session,
+            stats::end_session,
+            stats::heartbeat_session,
+            stats::get_daily_stats,
+            stats::get_per_book_stats,
+            stats::get_stats_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

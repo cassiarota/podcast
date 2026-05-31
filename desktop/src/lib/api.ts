@@ -157,4 +157,43 @@ export const api = {
   ): Promise<AudioChunk> =>
     invoke("play_cached_or_generate", { bookId, pageId, voicePreset }),
   getTtsStatus: (): Promise<TtsStatus> => invoke("get_tts_status"),
+
+  // Stats
+  startSession: (kind: "app" | "reading" | "playing", bookId?: string): Promise<string> =>
+    invoke("start_session", { kind, bookId: bookId ?? null }),
+  endSession: (sessionId: string): Promise<number> =>
+    invoke("end_session", { sessionId }),
+  heartbeatSession: (sessionId: string): Promise<void> =>
+    invoke("heartbeat_session", { sessionId }),
+  getDailyStats: (fromMs: number, toMs: number): Promise<DailyStat[]> =>
+    invoke("get_daily_stats", { fromMs, toMs }),
+  getPerBookStats: (): Promise<BookStat[]> => invoke("get_per_book_stats"),
+  getStatsSummary: (): Promise<StatsSummary> => invoke("get_stats_summary"),
 };
+
+export interface DailyStat {
+  date: string; // YYYY-MM-DD
+  app_ms: number;
+  reading_ms: number;
+  playing_ms: number;
+}
+
+export interface BookStat {
+  book_id: string;
+  title: string;
+  reading_ms: number;
+  playing_ms: number;
+  sessions: number;
+  last_used_at: number | null;
+}
+
+export interface StatsSummary {
+  total_app_ms: number;
+  total_reading_ms: number;
+  total_playing_ms: number;
+  today_app_ms: number;
+  today_reading_ms: number;
+  today_playing_ms: number;
+  books_listened: number;
+  books_read: number;
+}
