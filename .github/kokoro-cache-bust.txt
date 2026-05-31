@@ -1,0 +1,3 @@
+# Bump this file to invalidate the cached Kokoro model in CI.
+# Format: a date or version tag.
+v1

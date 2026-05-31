@@ -1,0 +1,175 @@
+# 随身听 — cross-platform packaged builds
+#
+# Triggers:
+#   - push to master / main → build both, save 90-day artifacts
+#   - push tag v*           → build both AND create a GitHub Release
+#                              with the artifacts attached
+#   - manual (workflow_dispatch) → same as push
+#
+# Kokoro model is downloaded from Hugging Face (not Git LFS) to avoid
+# burning the repo's monthly LFS bandwidth on CI builds. The repo's
+# LFS-tracked copy is still the source of truth for developer clones.
+
+name: Build
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macos-arm64
+            target: aarch64-apple-darwin
+            bundle_dir: aarch64-apple-darwin/release/bundle/dmg
+            ext: dmg
+            artifact_name: SuiShenTing-macos-arm64.dmg
+          - os: windows-2022
+            label: windows-x64
+            target: x86_64-pc-windows-msvc
+            bundle_dir: x86_64-pc-windows-msvc/release/bundle/msi
+            ext: msi
+            artifact_name: SuiShenTing-windows-x64.msi
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout (skip LFS to save bandwidth)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Python (used only to install huggingface_hub for the model download)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The model + voices are 330 MB total. Cache them keyed by a small
+      # bust file in the repo. Bump .github/kokoro-cache-bust.txt to force
+      # a re-download.
+      - name: Cache Kokoro model
+        id: kokoro-cache
+        uses: actions/cache@v4
+        with:
+          path: models/Kokoro-82M
+          key: kokoro-82m-${{ hashFiles('.github/kokoro-cache-bust.txt') }}
+
+      - name: Download Kokoro model from Hugging Face
+        if: steps.kokoro-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "huggingface_hub[cli]"
+          mkdir -p models
+          huggingface-cli download hexgrad/Kokoro-82M --local-dir models/Kokoro-82M
+
+      - name: Verify model exists
+        shell: bash
+        run: |
+          ls -lh models/Kokoro-82M/kokoro-v1_0.pth
+          size=$(wc -c < models/Kokoro-82M/kokoro-v1_0.pth)
+          if [ "$size" -lt 1000000 ]; then
+            echo "Kokoro model is suspiciously small ($size bytes)."
+            exit 1
+          fi
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: cargo-${{ matrix.label }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ matrix.label }}-
+
+      - name: Install JS deps
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        working-directory: desktop
+        env:
+          # Skip code signing — no Apple Developer ID or Windows signing
+          # cert configured. Output is unsigned (Gatekeeper / SmartScreen
+          # will warn; users right-click → Open the first time).
+          APPLE_SIGNING_IDENTITY: ''
+          TAURI_SKIP_SIDECAR_SIGNATURE_CHECK: '1'
+        run: pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Stage artifact with ASCII name
+        id: stage
+        shell: bash
+        run: |
+          src=$(find desktop/src-tauri/target/${{ matrix.bundle_dir }} -name "*.${{ matrix.ext }}" | head -1)
+          if [ -z "$src" ]; then
+            echo "No .${{ matrix.ext }} produced under ${{ matrix.bundle_dir }}"
+            ls -laR desktop/src-tauri/target/${{ matrix.target }}/release/bundle/ || true
+            exit 1
+          fi
+          mkdir -p _dist
+          cp "$src" "_dist/${{ matrix.artifact_name }}"
+          ls -lh _dist
+          echo "path=_dist/${{ matrix.artifact_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ steps.stage.outputs.path }}
+          retention-days: 90
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifact directories
+        shell: bash
+        run: |
+          mkdir -p release
+          find dist -type f \( -name "*.dmg" -o -name "*.msi" \) -exec cp {} release/ \;
+          ls -lh release
+
+      - name: Publish / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
