@@ -2,6 +2,7 @@ pub mod cache;
 pub mod db;
 pub mod import_epub;
 pub mod import_txt;
+pub mod notes;
 pub mod reader;
 pub mod sidecar;
 pub mod stats;
@@ -107,6 +108,11 @@ pub fn run() {
             stats::get_daily_stats,
             stats::get_per_book_stats,
             stats::get_stats_summary,
+            notes::add_note,
+            notes::delete_note,
+            notes::list_notes,
+            notes::list_books_with_notes,
+            tts::synth_sentence,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

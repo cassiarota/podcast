@@ -42,9 +42,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout (skip LFS to save bandwidth)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
+          # We pull LFS in a separate cached step below — saves the
+          # repo's LFS bandwidth on builds that don't touch the model.
           lfs: false
 
       - name: Setup pnpm
@@ -64,30 +66,25 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Setup Python (used only to install huggingface_hub for the model download)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      # The model + voices are 330 MB total. Cache them keyed by a small
-      # bust file in the repo. Bump .github/kokoro-cache-bust.txt to force
-      # a re-download.
+      # Cache the Kokoro model directory keyed by the LFS pointer hash
+      # so we only pay LFS bandwidth when the actual model file changes.
       - name: Cache Kokoro model
         id: kokoro-cache
         uses: actions/cache@v4
         with:
           path: models/Kokoro-82M
-          key: kokoro-82m-${{ hashFiles('.github/kokoro-cache-bust.txt') }}
+          key: kokoro-82m-lfs-${{ hashFiles('models/Kokoro-82M/.gitattributes', '.github/kokoro-cache-bust.txt') }}
 
-      - name: Download Kokoro model from Hugging Face
+      - name: Install Git LFS and pull Kokoro
         if: steps.kokoro-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install "huggingface_hub[cli]"
-          mkdir -p models
-          # huggingface_hub 1.x renamed `huggingface-cli` to `hf`.
-          hf download hexgrad/Kokoro-82M --local-dir models/Kokoro-82M
+          # macOS already has git-lfs; Windows runners need an explicit install.
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            choco install git-lfs -y --no-progress || true
+          fi
+          git lfs install
+          git lfs pull --include="models/Kokoro-82M/**"
 
       - name: Verify model exists
         shell: bash
@@ -95,7 +92,7 @@ jobs:
           ls -lh models/Kokoro-82M/kokoro-v1_0.pth
           size=$(wc -c < models/Kokoro-82M/kokoro-v1_0.pth)
           if [ "$size" -lt 1000000 ]; then
-            echo "Kokoro model is suspiciously small ($size bytes)."
+            echo "Kokoro model is suspiciously small ($size bytes) — LFS pull failed."
             exit 1
           fi
 

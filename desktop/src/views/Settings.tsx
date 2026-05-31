@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useSettingsStore } from "../state/settings";
 import { useTtsSettingsStore } from "../state/tts";
+import { usePlayerStore } from "../state/player";
 import { useT, type MessageKey } from "../lib/i18n";
 
 interface SettingsProps {
@@ -337,6 +338,10 @@ export function Settings({ onClose }: SettingsProps) {
               <option value="off">{t("settings.reading.autoPageTurn.off")}</option>
             </select>
           </Row>
+
+          <Row label={t("settings.reading.playbackSpeed")}>
+            <PlaybackSpeedSelector />
+          </Row>
         </section>
 
         <section className="settings-section">
@@ -353,6 +358,26 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="settings-row">
       <label>{label}</label>
       <div className="settings-control">{children}</div>
+    </div>
+  );
+}
+
+function PlaybackSpeedSelector() {
+  const rate = usePlayerStore((s) => s.playbackRate);
+  const setRate = usePlayerStore((s) => s.setPlaybackRate);
+  const opts = [1, 1.25, 1.5, 2];
+  return (
+    <div className="speed-row">
+      {opts.map((v) => (
+        <button
+          key={v}
+          type="button"
+          className={`speed-btn ${Math.abs(rate - v) < 0.01 ? "active" : ""}`}
+          onClick={() => setRate(v)}
+        >
+          {v}x
+        </button>
+      ))}
     </div>
   );
 }

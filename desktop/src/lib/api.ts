@@ -171,7 +171,42 @@ export const api = {
     invoke("get_daily_stats", { fromMs, toMs }),
   getPerBookStats: (): Promise<BookStat[]> => invoke("get_per_book_stats"),
   getStatsSummary: (): Promise<StatsSummary> => invoke("get_stats_summary"),
+
+  // Notes
+  addNote: (
+    bookId: string,
+    pageId: string | null,
+    sentenceIndex: number | null,
+    text: string,
+  ): Promise<string> =>
+    invoke("add_note", { bookId, pageId, sentenceIndex, text }),
+  deleteNote: (noteId: string): Promise<void> =>
+    invoke("delete_note", { noteId }),
+  listNotes: (bookId: string | null, search: string | null): Promise<Note[]> =>
+    invoke("list_notes", { bookId, search }),
+  listBooksWithNotes: (): Promise<NotedBook[]> => invoke("list_books_with_notes"),
+
+  // Streaming TTS — synthesize one sentence at a time, frontend strings
+  // them together.
+  synthSentence: (text: string): Promise<AudioChunk> =>
+    invoke("synth_sentence", { text }),
 };
+
+export interface Note {
+  id: string;
+  book_id: string;
+  book_title: string;
+  page_id: string | null;
+  sentence_index: number | null;
+  text: string;
+  created_at: number;
+}
+
+export interface NotedBook {
+  book_id: string;
+  title: string;
+  note_count: number;
+}
 
 export interface DailyStat {
   date: string; // YYYY-MM-DD

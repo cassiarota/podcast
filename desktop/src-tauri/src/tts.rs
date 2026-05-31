@@ -728,3 +728,101 @@ mod voice_detection_tests {
         assert_eq!(language, "en");
     }
 }
+
+/// Streaming-friendly variant of play_cached_or_generate: takes raw text
+/// (not a page id), runs the same auto-detect + cache-key logic, returns
+/// the synthesized chunk. The frontend uses this to fire one request per
+/// sentence and stream playback.
+#[tauri::command]
+pub async fn synth_sentence(
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<AudioChunk, String> {
+    let tts_settings = crate::reader::get_tts_settings(state.clone())
+        .unwrap_or_else(|_| crate::reader::TtsSettings::default());
+    let engine = tts_settings.engine.clone();
+    let mut voice = tts_settings.voice.clone();
+    let mut language = tts_settings.language.clone();
+    let speed = tts_settings.speed as f32;
+
+    // Same content-aware override the page path uses.
+    detect_and_override_voice(&text, &mut voice, &mut language, &engine);
+
+    let text_hash = hex::encode(Sha256::digest(text.as_bytes()));
+    let key = cache::cache_key(&text_hash, &engine, &voice, &language, speed);
+
+    // Cache hit?
+    if let Some(existing) = {
+        let conn = state.db.lock();
+        conn.query_row(
+            "SELECT id, path, duration_ms FROM audio_chunks WHERE cache_key = ?1",
+            params![key],
+            |r| {
+                Ok(AudioChunk {
+                    id: r.get(0)?,
+                    page_id: None,
+                    cache_key: key.clone(),
+                    path: r.get(1)?,
+                    duration_ms: r.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    } {
+        if std::path::Path::new(&existing.path).exists() {
+            return Ok(existing);
+        }
+    }
+
+    state.sidecar.ensure_running().await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .unwrap();
+    let req = serde_json::json!({
+        "text": text,
+        "engine": engine,
+        "voice": voice,
+        "language": language,
+        "speed": speed,
+        "cache_key": key,
+    });
+    let resp = client
+        .post(format!("http://127.0.0.1:{}/tts/realtime", state.sidecar.port()))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let raw = resp.text().await.unwrap_or_default();
+        return Err(format!("synth ({status}): {}", parse_sidecar_error(&raw)));
+    }
+    let body: SidecarSynthResult = resp.json().await.map_err(|e| e.to_string())?;
+    let chunk_id = Uuid::new_v4().to_string();
+    {
+        let conn = state.db.lock();
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO audio_chunks (id, book_id, page_id, section_id, cache_key, path, duration_ms, engine, voice_preset, text_hash, created_at)
+             VALUES (?1, '', NULL, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                chunk_id,
+                body.cache_key,
+                body.path,
+                body.duration_ms,
+                engine,
+                voice,
+                text_hash,
+                now_secs()
+            ],
+        );
+    }
+    Ok(AudioChunk {
+        id: chunk_id,
+        page_id: None,
+        cache_key: body.cache_key,
+        path: body.path,
+        duration_ms: body.duration_ms,
+    })
+}

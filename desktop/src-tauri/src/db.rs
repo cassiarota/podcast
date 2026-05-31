@@ -103,6 +103,18 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS usage_sessions_kind_day ON usage_sessions(kind, started_at);
         CREATE INDEX IF NOT EXISTS usage_sessions_book ON usage_sessions(book_id);
+
+        -- User-saved notes (highlights). Created when the user taps a
+        -- sentence in the reader and picks 📝 笔记.
+        CREATE TABLE IF NOT EXISTS notes (
+            id              TEXT PRIMARY KEY,
+            book_id         TEXT NOT NULL,
+            page_id         TEXT,
+            sentence_index  INTEGER,
+            text            TEXT NOT NULL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS notes_book ON notes(book_id, created_at);
         "#,
     )?;
     Ok(())

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useReaderStore } from "../state/reader";
 import { useSettingsStore } from "../state/settings";
 import { usePlayerStore } from "../state/player";
 import { useT } from "../lib/i18n";
 import { useReadingSession } from "../lib/sessions";
+import { splitSentences } from "../lib/sentences";
 import { TOC } from "./TOC";
 
 const AUTO_HIDE_MS = 2200;
@@ -143,9 +144,7 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
 
   return (
     <div className="reader">
-      <div className="reader-content" aria-label={page?.section_id || ""}>
-        {page?.content ?? ""}
-      </div>
+      <SentenceContent />
 
       <div
         className="tap-overlay"
@@ -260,4 +259,130 @@ function fmtTime(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Renders the page text broken into sentence spans. The currently-playing
+ * sentence is highlighted; clicking a sentence opens a small floating
+ * menu with ▶ Play-from-here / 📝 Save-as-note.
+ */
+function SentenceContent() {
+  const page = useReaderStore((s) => s.currentPage);
+  const playerSentences = usePlayerStore((s) => s.sentences);
+  const currentIdx = usePlayerStore((s) => s.currentSentence);
+  const playerPageId = usePlayerStore((s) => s.pageId);
+  const playPage = usePlayerStore((s) => s.playPage);
+  const stop = usePlayerStore((s) => s.stop);
+  const [menu, setMenu] = useState<{ idx: number; x: number; y: number } | null>(null);
+
+  // Compute the on-screen sentence list ONCE per page. We fall back to the
+  // player's sentence cache when it's playing this page (which carries the
+  // exact same split logic), otherwise re-split client-side.
+  const sentences = useMemo(() => {
+    if (!page) return [] as string[];
+    if (
+      playerPageId === page.id &&
+      playerSentences.length > 0 &&
+      playerSentences.every((s) => s.text)
+    ) {
+      return playerSentences.map((s) => s.text);
+    }
+    // Lazy import to avoid pulling sentences.ts at module top.
+    return splitSentences(page.content);
+  }, [page, playerSentences, playerPageId]);
+
+  if (!page) return <div className="reader-content" />;
+
+  const isThisPagePlaying = playerPageId === page.id && playerSentences.length > 0;
+
+  return (
+    <>
+      <div className="reader-content" aria-label={page.section_id || ""}>
+        {sentences.length === 0 ? (
+          page.content
+        ) : (
+          sentences.map((s: string, i: number) => {
+            const active = isThisPagePlaying && i === currentIdx;
+            const loading = isThisPagePlaying && playerSentences[i]?.loading;
+            return (
+              <span
+                key={i}
+                className={`sentence ${active ? "sentence-active" : ""} ${loading ? "sentence-loading" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenu({ idx: i, x: e.clientX, y: e.clientY });
+                }}
+              >
+                {s}
+                {/* Preserve readable spacing between sentences. */}
+                {" "}
+              </span>
+            );
+          })
+        )}
+      </div>
+
+      {menu && page && (
+        <SentenceMenu
+          x={menu.x}
+          y={menu.y}
+          sentenceText={sentences[menu.idx]}
+          onPlay={async () => {
+            const bid = page.book_id;
+            const pid = page.id;
+            setMenu(null);
+            // Stop existing playback, then start from this sentence.
+            stop();
+            await playPage(bid, pid, page.content, menu.idx);
+          }}
+          onNote={async () => {
+            try {
+              await (await import("../lib/api")).api.addNote(
+                page.book_id,
+                page.id,
+                menu.idx,
+                sentences[menu.idx],
+              );
+              setMenu(null);
+            } catch (e) {
+              alert(`保存笔记失败: ${e}`);
+            }
+          }}
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </>
+  );
+}
+
+interface SentenceMenuProps {
+  x: number;
+  y: number;
+  sentenceText: string;
+  onPlay: () => void;
+  onNote: () => void;
+  onClose: () => void;
+}
+
+function SentenceMenu({ x, y, onPlay, onNote, onClose }: SentenceMenuProps) {
+  useEffect(() => {
+    const close = () => onClose();
+    const id = window.setTimeout(() => {
+      window.addEventListener("pointerdown", close, { once: true });
+    }, 100);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("pointerdown", close);
+    };
+  }, [onClose]);
+  return (
+    <div
+      className="sentence-menu"
+      style={{ top: y + 8, left: x }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button onClick={onPlay}>▶ 从此句播放</button>
+      <button onClick={onNote}>📝 加为笔记</button>
+    </div>
+  );
 }

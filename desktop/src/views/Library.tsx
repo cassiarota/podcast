@@ -10,11 +10,12 @@ import { BookActionModal } from "./BookActionModal";
 interface LibraryProps {
   onOpenSettings: () => void;
   onOpenStats: () => void;
+  onOpenNotes: () => void;
 }
 
 const LONG_PRESS_MS = 500;
 
-export function Library({ onOpenSettings, onOpenStats }: LibraryProps) {
+export function Library({ onOpenSettings, onOpenStats, onOpenNotes }: LibraryProps) {
   const t = useT();
   const books = useLibraryStore((s) => s.books);
   const importBook = useLibraryStore((s) => s.importBook);
@@ -78,6 +79,9 @@ export function Library({ onOpenSettings, onOpenStats }: LibraryProps) {
             {t("library.select")}
           </button>
         )}
+        <button className="settings-button" onClick={onOpenNotes}>
+          📝 笔记
+        </button>
         <button className="settings-button" onClick={onOpenStats}>
           {t("library.stats")}
         </button>

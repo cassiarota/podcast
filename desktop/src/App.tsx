@@ -3,6 +3,7 @@ import { Library } from "./views/Library";
 import { Reader } from "./views/Reader";
 import { Settings } from "./views/Settings";
 import { StatsView } from "./views/Stats";
+import { NotesView } from "./views/Notes";
 import { JobsButton, JobsPanel } from "./views/JobsPanel";
 import { useLibraryStore } from "./state/library";
 import { useReaderStore } from "./state/reader";
@@ -18,6 +19,7 @@ export function App() {
   const loadTts = useTtsSettingsStore((s) => s.load);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   useAppUsageSession();
 
@@ -43,7 +45,9 @@ export function App() {
     <div className="app" lang={settings.uiLanguage}>
       <JobsButton />
       <JobsPanel />
-      {statsOpen ? (
+      {notesOpen ? (
+        <NotesView onClose={() => setNotesOpen(false)} />
+      ) : statsOpen ? (
         <StatsView onClose={() => setStatsOpen(false)} />
       ) : settingsOpen ? (
         <Settings onClose={() => setSettingsOpen(false)} />
@@ -53,6 +57,7 @@ export function App() {
         <Library
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenStats={() => setStatsOpen(true)}
+          onOpenNotes={() => setNotesOpen(true)}
         />
       )}
       <div
