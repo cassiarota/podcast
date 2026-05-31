@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Podcast Reader</string>
+    <string name="library_title">书架</string>
+    <string name="import_book">导入书籍</string>
+    <string name="empty_shelf">书架空空如也。点击「导入书籍」开始阅读。</string>
+    <string name="reader_back">返回书架</string>
+    <string name="contents">目录</string>
+    <string name="font_size">字号</string>
+    <string name="font_small">小</string>
+    <string name="font_medium">中</string>
+    <string name="font_large">大</string>
+    <string name="theme">主题</string>
+    <string name="brightness">亮度</string>
+    <string name="play">播放</string>
+    <string name="stop">停止</string>
+    <string name="generating">生成中</string>
+    <string name="error_import">导入失败：%1$s</string>
+    <string name="error_tts">音频生成失败：%1$s</string>
+</resources>

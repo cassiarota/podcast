@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Gradle wrapper script. Run `gradle wrapper` once with a system Gradle install
+# to materialize gradle/wrapper/gradle-wrapper.jar (binary, not checked in).
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+JAR="$DIR/gradle/wrapper/gradle-wrapper.jar"
+if [ ! -f "$JAR" ]; then
+    echo "gradle-wrapper.jar missing. Run 'gradle wrapper' once to materialize it." >&2
+    exit 1
+fi
+exec java ${JAVA_OPTS:-} -classpath "$JAR" org.gradle.wrapper.GradleWrapperMain "$@"

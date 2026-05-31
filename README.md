@@ -25,7 +25,7 @@ demo.txt    用于 demo 的示例文本
 | --- | --- | --- | --- |
 | Windows 10/11 x64 | Tauri v2 + React/TS | Qwen（需 CUDA） | 已实现，待在真实 Windows + CUDA 环境验证 |
 | macOS 13+ | Tauri v2 + React/TS | Kokoro（CPU） | 已实现，可在本地运行 |
-| Android 8+ | Jetpack Compose | Kokoro ONNX（int8） | Phase 2 规划，暂未实现 |
+| Android 8+ | Jetpack Compose | Kokoro ONNX（int8） | Phase 2 工程已实现，量化模型需 `scripts/convert_kokoro_to_onnx.py` 离线产出 |
 
 ## 快速开始
 
@@ -78,7 +78,26 @@ pnpm tauri dev
 
 ### Android
 
-暂未实现。Phase 2 详见 [`android/README.md`](android/README.md)。
+Phase 2 已实现完整 Android Studio 工程，使用 Kotlin + Jetpack Compose + Room + ONNX Runtime Mobile。详见 [`android/README.md`](android/README.md)。
+
+简要流程：
+
+```sh
+# 1. 用 Android Studio 打开 android/ 目录，或在命令行：
+cd android
+gradle wrapper           # 生成 wrapper jar（仓库不提交二进制）
+./gradlew :app:assembleDebug
+
+# 2. （可选）准备真实 Kokoro ONNX 模型
+git lfs pull
+pip install torch onnx onnxruntime kokoro
+python scripts/convert_kokoro_to_onnx.py
+
+# 3. 安装到设备
+./gradlew :app:installDebug
+```
+
+未放置真模型时应用自动回落到 stub 引擎，可走通完整流程（含正弦波 demo 音频）。
 
 ## 使用方法
 

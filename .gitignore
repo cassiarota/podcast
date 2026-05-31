@@ -16,3 +16,13 @@ desktop/sidecar/.pytest_cache/
 *.db
 audio_cache/
 demo_runtime/
+
+# android
+android/.gradle/
+android/.idea/
+android/local.properties
+android/app/build/
+android/build/
+android/captures/
+android/gradle/wrapper/gradle-wrapper.jar
+*.iml
