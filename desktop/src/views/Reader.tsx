@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useReaderStore } from "../state/reader";
 import { useSettingsStore } from "../state/settings";
+import { useT } from "../lib/i18n";
 import { TOC } from "./TOC";
 
-const HIDE_DELAY_MS = 2200;
+const AUTO_HIDE_MS = 2200;
+const SWIPE_THRESHOLD_PX = 50;
+const SWIPE_MAX_DURATION_MS = 600;
 
 interface ReaderProps {
   bookId: string;
@@ -11,6 +14,7 @@ interface ReaderProps {
 }
 
 export function Reader({ bookId, onOpenSettings }: ReaderProps) {
+  const t = useT();
   const open = useReaderStore((s) => s.open);
   const close = useReaderStore((s) => s.close);
   const next = useReaderStore((s) => s.next);
@@ -21,6 +25,7 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
   const controlsVisible = useReaderStore((s) => s.controlsVisible);
   const toggleControls = useReaderStore((s) => s.toggleControls);
   const hideControls = useReaderStore((s) => s.hideControls);
+  const showControls = useReaderStore((s) => s.showControls);
   const tocOpen = useReaderStore((s) => s.tocOpen);
   const setTocOpen = useReaderStore((s) => s.setTocOpen);
   const settings = useSettingsStore((s) => s.settings);
@@ -32,42 +37,114 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
     open(bookId);
   }, [bookId, open]);
 
+  // Auto-hide is now opt-in via settings.menuAutoHide. Default: stays visible
+  // until the user taps the main content area (not the menu) — that hide
+  // happens in handleMainPointerUp below.
   useEffect(() => {
-    if (!controlsVisible) return;
+    if (!controlsVisible || !settings.menuAutoHide) return;
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = window.setTimeout(hideControls, HIDE_DELAY_MS);
+    hideTimerRef.current = window.setTimeout(hideControls, AUTO_HIDE_MS);
     return () => {
       if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     };
-  }, [controlsVisible, hideControls, pageIndex]);
+  }, [controlsVisible, hideControls, pageIndex, settings.menuAutoHide]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") prev();
       else if (e.key === "ArrowRight") next();
-      else if (e.key === "Escape") close();
+      else if (e.key === "Escape") {
+        if (controlsVisible) hideControls();
+        else close();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev, close]);
+  }, [next, prev, close, controlsVisible, hideControls]);
+
+  // Pointer-based gesture handling for the main content area.
+  // - When the controls are visible: any tap on the main area hides them.
+  //   We deliberately do NOT advance the page in that case — matching the
+  //   "tap outside menu to hide" mental model.
+  // - When hidden:
+  //   - In "tap" mode: left/right thirds turn pages; center reveals controls.
+  //   - In "swipe" mode: a horizontal drag turns pages; a stationary tap
+  //     toggles controls.
+  const pointerStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+
+  const handleMainPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointerStartRef.current = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+  };
+
+  const handleMainPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = pointerStartRef.current;
+    pointerStartRef.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const dt = e.timeStamp - start.t;
+    const target = e.currentTarget;
+    const width = target.clientWidth;
+
+    // 1. If menu visible → any pointer up hides it. Don't turn page.
+    if (controlsVisible) {
+      hideControls();
+      return;
+    }
+
+    // 2. Recognize swipe (large horizontal delta, small vertical, quick).
+    const isSwipe =
+      settings.pageTurnMode === "swipe" &&
+      Math.abs(dx) >= SWIPE_THRESHOLD_PX &&
+      Math.abs(dx) > Math.abs(dy) * 1.5 &&
+      dt < SWIPE_MAX_DURATION_MS;
+    if (isSwipe) {
+      if (dx < 0) next();
+      else prev();
+      return;
+    }
+
+    // 3. Treat the rest as a stationary tap.
+    if (settings.pageTurnMode === "tap") {
+      // Tap regions: left third = prev, right third = next, center = menu.
+      const x = e.clientX;
+      if (x < width / 3) prev();
+      else if (x > (2 * width) / 3) next();
+      else showControls();
+    } else {
+      // In swipe mode, a single tap toggles the menu (it's the only way to
+      // reach it).
+      toggleControls();
+    }
+  };
 
   const percent = pageCount > 0 ? Math.round(((pageIndex + 1) / pageCount) * 100) : 0;
 
   return (
     <div className="reader">
-      <div className="reader-content">{page?.content ?? ""}</div>
-      <div className="tap-regions">
-        <div className="tap" onClick={prev} aria-label="previous" />
-        <div className="tap" onClick={toggleControls} aria-label="toggle controls" />
-        <div className="tap" onClick={next} aria-label="next" />
+      <div className="reader-content" aria-label={page?.section_id || ""}>
+        {page?.content ?? ""}
       </div>
+
+      <div
+        className="tap-overlay"
+        onPointerDown={handleMainPointerDown}
+        onPointerUp={handleMainPointerUp}
+        aria-label={t("reader.toggleControls")}
+      />
+
       <TOC open={tocOpen} onClose={() => setTocOpen(false)} />
-      <div className={`controls ${controlsVisible ? "" : "hidden"}`}>
-        <button onClick={close}>← Library</button>
-        <button onClick={() => setTocOpen(true)}>Contents</button>
-        <button onClick={onOpenSettings}>⚙ 设置</button>
+
+      <div
+        className={`controls ${controlsVisible ? "" : "hidden"}`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+      >
+        <button onClick={close}>{t("reader.back")}</button>
+        <button onClick={() => setTocOpen(true)}>{t("reader.contents")}</button>
+        <button onClick={onOpenSettings}>{t("reader.settings")}</button>
         <label>
-          Font
+          {t("settings.reading.fontSize")}
           <select
             value={settings.fontSize}
             onChange={(e) =>
@@ -75,32 +152,13 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
             }
             style={{ marginLeft: 6 }}
           >
-            <option value="small">S</option>
-            <option value="medium">M</option>
-            <option value="large">L</option>
+            <option value="small">{t("settings.reading.fontSize.small")}</option>
+            <option value="medium">{t("settings.reading.fontSize.medium")}</option>
+            <option value="large">{t("settings.reading.fontSize.large")}</option>
           </select>
         </label>
         <label>
-          Theme
-          <select
-            value={settings.background}
-            onChange={(e) => updateSettings({ background: e.target.value })}
-            style={{ marginLeft: 6 }}
-          >
-            <option value="white">White</option>
-            <option value="warm-paper">Warm Paper</option>
-            <option value="sepia">Sepia</option>
-            <option value="eye-protect-green">Eye-Protect Green</option>
-            <option value="gray">Gray</option>
-            <option value="low-contrast">Low Contrast</option>
-            <option value="cool-paper">Cool Paper</option>
-            <option value="rose">Rose</option>
-            <option value="dark">Dark</option>
-            <option value="black">Black</option>
-          </select>
-        </label>
-        <label>
-          Brightness
+          {t("settings.reading.brightness")}
           <input
             type="range"
             min="0.3"
@@ -117,44 +175,48 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
         <PlayButton />
         <div className="progress">{percent}%</div>
       </div>
+
+      {/* Always-visible progress badge (works even when controls hidden) */}
+      <div className={`progress-badge ${controlsVisible ? "with-controls" : ""}`}>
+        {percent}%
+      </div>
     </div>
   );
 }
 
 function PlayButton() {
+  const t = useT();
   const page = useReaderStore((s) => s.currentPage);
   const [busy, setBusy] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   if (!page) return null;
   return (
-    <>
-      <button
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            const { api } = await import("../lib/api");
-            const chunk = await api.playCachedOrGenerate(
-              page.book_id,
-              page.id,
-              "" // empty → backend reads saved TtsSettings.voice
-            );
-            const { convertFileSrc } = await import("@tauri-apps/api/core");
-            const url = convertFileSrc(chunk.path);
-            if (!audioRef.current) audioRef.current = new Audio();
-            audioRef.current.src = url;
-            await audioRef.current.play();
-          } catch (e) {
-            console.error("playback failed", e);
-            alert(`Playback failed: ${e}`);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {busy ? "…" : "▶ Play"}
-      </button>
-    </>
+    <button
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const { api } = await import("../lib/api");
+          const chunk = await api.playCachedOrGenerate(
+            page.book_id,
+            page.id,
+            "" // empty → backend reads saved TtsSettings.voice
+          );
+          const { convertFileSrc } = await import("@tauri-apps/api/core");
+          const url = convertFileSrc(chunk.path);
+          if (!audioRef.current) audioRef.current = new Audio();
+          audioRef.current.src = url;
+          await audioRef.current.play();
+        } catch (e) {
+          console.error("playback failed", e);
+          alert(`${t("reader.ttsErrorTitle")}: ${e}`);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? t("reader.busy") : t("reader.play")}
+    </button>
   );
 }

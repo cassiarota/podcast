@@ -36,8 +36,16 @@ export interface ReadingPosition {
 
 export interface ReaderSettings {
   fontSize: "small" | "medium" | "large";
+  /** Custom px override. 0 means "use the preset above". */
+  fontSizePx: number;
   background: string;
   brightness: number;
+  /** App chrome language: "zh" or "en". */
+  uiLanguage: "zh" | "en";
+  /** "tap" (current default) or "swipe" (horizontal drag gesture). */
+  pageTurnMode: "tap" | "swipe";
+  /** When true the bottom controls auto-hide after 2 s of inactivity. */
+  menuAutoHide: boolean;
 }
 
 export interface TtsSettings {

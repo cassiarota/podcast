@@ -29,12 +29,12 @@ export function App() {
     );
     document.documentElement.style.setProperty(
       "--font-size",
-      fontSizePx(settings.fontSize)
+      computeFontSize(settings.fontSize, settings.fontSizePx)
     );
   }, [settings]);
 
   return (
-    <div className="app">
+    <div className="app" lang={settings.uiLanguage}>
       {settingsOpen ? (
         <Settings onClose={() => setSettingsOpen(false)} />
       ) : openBookId ? (
@@ -50,6 +50,8 @@ export function App() {
   );
 }
 
-function fontSizePx(size: "small" | "medium" | "large") {
-  return size === "small" ? "16px" : size === "large" ? "24px" : "19px";
+/** Custom px override wins; otherwise fall back to the preset. */
+function computeFontSize(preset: "small" | "medium" | "large", px: number): string {
+  if (px && px > 0) return `${Math.max(8, Math.min(80, px))}px`;
+  return preset === "small" ? "16px" : preset === "large" ? "24px" : "19px";
 }

@@ -16,9 +16,22 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+
+# IMPORTANT: Pydantic body models MUST live at module scope. Defining them
+# inside make_app() (a closure) makes FastAPI 0.136 / Pydantic 2.13 fail to
+# recognize them as BaseModel subclasses, and the parameter gets reinterpreted
+# as a query parameter — every POST then 422s with "field required".
+class SynthRequest(BaseModel):
+    text: str
+    engine: Optional[str] = None
+    voice: str = "default"
+    cache_key: Optional[str] = None
+    speed: float = 1.0
+    language: str = "en"
 
 from engine_base import Engine, NotReadyError
 from engine_stub import StubEngine
@@ -107,16 +120,8 @@ def make_app(state: State) -> FastAPI:
             "idle_seconds": state.idle_seconds(),
         }
 
-    class SynthRequest(BaseModel):
-        text: str
-        engine: Optional[str] = None
-        voice: str = "default"
-        cache_key: Optional[str] = None
-        speed: float = 1.0
-        language: str = "en"
-
     @app.post("/tts/realtime")
-    def synth(req: SynthRequest):
+    def synth(req: SynthRequest = Body(...)):
         state.touch()
         # Honor the per-request engine override — this is how the Settings
         # view's engine choice flows down. Swap engines if needed.
@@ -131,6 +136,19 @@ def make_app(state: State) -> FastAPI:
             engine = state.ensure_engine()
         except NotReadyError as exc:
             return JSONResponse(status_code=503, content={"reason": exc.reason, "message": str(exc), "paths": exc.paths})
+        except Exception as exc:
+            # Any other engine load error — surface the type + message so the
+            # UI can show something more useful than "unknown ()".
+            import traceback
+            logger.exception("engine load failed")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reason": f"engine_load_failed:{type(exc).__name__}",
+                    "message": str(exc),
+                    "traceback": traceback.format_exc().splitlines()[-12:],
+                },
+            )
 
         key = req.cache_key or _derive_cache_key(req.text, state.engine_name, req.voice, req.language, req.speed)
         path = state.audio_cache / f"{key}.wav"
@@ -140,7 +158,19 @@ def make_app(state: State) -> FastAPI:
             duration = engine.wav_duration_ms(path)
             return {"cache_key": key, "path": str(path), "duration_ms": duration}
 
-        duration = engine.synthesize(req.text, str(path), voice=req.voice, language=req.language, speed=req.speed)
+        try:
+            duration = engine.synthesize(req.text, str(path), voice=req.voice, language=req.language, speed=req.speed)
+        except Exception as exc:
+            import traceback
+            logger.exception("synthesize failed")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reason": f"synthesize_failed:{type(exc).__name__}",
+                    "message": str(exc),
+                    "traceback": traceback.format_exc().splitlines()[-12:],
+                },
+            )
         return {"cache_key": key, "path": str(path), "duration_ms": duration}
 
     @app.post("/tts/jobs")

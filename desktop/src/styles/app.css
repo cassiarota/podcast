@@ -54,21 +54,38 @@ body {
 .reader-content {
   height: 100%; overflow: hidden; white-space: pre-wrap;
   font-size: var(--font-size); line-height: 1.7; font-family: Georgia, serif;
+  user-select: none;
 }
-.tap-regions { position: absolute; inset: 0; display: flex; }
-.tap { flex: 1; cursor: pointer; }
+/* Single full-window pointer-target overlay. Reader.tsx interprets pointer
+ * events as tap / swipe / "tap-outside-menu". Controls live above this and
+ * call stopPropagation so menu clicks never bubble down. */
+.tap-overlay {
+  position: absolute; inset: 0; cursor: pointer;
+  touch-action: pan-y;
+  z-index: 1;
+}
 .controls {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: rgba(20,20,20,0.92); color: #eee;
   padding: 12px 24px; display: flex; gap: 16px; align-items: center;
   transition: transform 0.25s, opacity 0.25s;
+  z-index: 5;
+  flex-wrap: wrap;
 }
-.controls.hidden { transform: translateY(100%); opacity: 0; }
+.controls.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
 .controls button { background: #333; color: #eee; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 .controls button:hover { background: #444; }
 .controls select { background: #333; color: #eee; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; }
 .controls .spacer { flex: 1; }
 .progress { font-variant-numeric: tabular-nums; font-size: 14px; }
+.progress-badge {
+  position: fixed; right: 14px; bottom: 14px; z-index: 4;
+  background: rgba(0,0,0,0.55); color: #fff;
+  padding: 4px 10px; border-radius: 12px; font-size: 12px;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+  transition: opacity 0.2s;
+}
+.progress-badge.with-controls { opacity: 0; }
 
 /* TOC */
 .toc {
@@ -123,4 +140,16 @@ body {
   padding: 6px 8px; border-radius: 4px; max-width: 360px;
 }
 .settings-control input[type="range"] { padding: 0; }
+.settings-control input[type="number"] {
+  background: #1a1a1a; color: #eee; border: 1px solid #444;
+  padding: 6px 8px; border-radius: 4px; width: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.font-px-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.font-px-row input[type="range"] { flex: 1; max-width: 220px; }
+.settings-control button.ghost {
+  background: transparent; color: #aaa; border: 1px solid #444;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.settings-control button.ghost:hover { color: #fff; border-color: #666; }
 .settings-meta { color: #888; font-size: 12px; }

@@ -1,12 +1,14 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useLibraryStore } from "../state/library";
 import { useReaderStore } from "../state/reader";
+import { useT } from "../lib/i18n";
 
 interface LibraryProps {
   onOpenSettings: () => void;
 }
 
 export function Library({ onOpenSettings }: LibraryProps) {
+  const t = useT();
   const books = useLibraryStore((s) => s.books);
   const importBook = useLibraryStore((s) => s.importBook);
   const openBook = useReaderStore((s) => s.open);
@@ -26,22 +28,20 @@ export function Library({ onOpenSettings }: LibraryProps) {
       await importBook(path, false);
     } catch (e) {
       console.error("import failed", e);
-      alert(`Import failed: ${e}`);
+      alert(`${t("library.importFailed")}: ${e}`);
     }
   };
 
   return (
     <div className="library">
       <div className="library-header">
-        <h1>Library</h1>
-        <button className="settings-button" onClick={onOpenSettings} title="设置">
-          ⚙ 设置
+        <h1>{t("library.title")}</h1>
+        <button className="settings-button" onClick={onOpenSettings} title={t("reader.settings")}>
+          {t("reader.settings")}
         </button>
       </div>
       {books.length === 0 && (
-        <div className="empty-shelf">
-          Your shelf is empty. Tap <em>Import a book</em> to begin.
-        </div>
+        <div className="empty-shelf">{t("library.empty")}</div>
       )}
       <div className="shelf">
         {books.map((b) => (
@@ -56,7 +56,7 @@ export function Library({ onOpenSettings }: LibraryProps) {
           </div>
         ))}
         <div className="import-tile" onClick={onImport}>
-          + Import a book
+          {t("library.import")}
         </div>
       </div>
     </div>

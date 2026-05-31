@@ -1,12 +1,14 @@
 import { useEffect, useMemo } from "react";
 import { useSettingsStore } from "../state/settings";
 import { useTtsSettingsStore } from "../state/tts";
+import { useT, type MessageKey } from "../lib/i18n";
 
 interface SettingsProps {
   onClose: () => void;
 }
 
 export function Settings({ onClose }: SettingsProps) {
+  const t = useT();
   const reader = useSettingsStore((s) => s.settings);
   const updateReader = useSettingsStore((s) => s.update);
   const tts = useTtsSettingsStore((s) => s.settings);
@@ -23,7 +25,6 @@ export function Settings({ onClose }: SettingsProps) {
     () => engines.find((e) => e.id === tts.engine) ?? engines[0],
     [engines, tts.engine]
   );
-
   const availableLanguages = currentEngine?.languages ?? [];
   const filteredVoices = useMemo(() => {
     if (!currentEngine) return [];
@@ -31,7 +32,6 @@ export function Settings({ onClose }: SettingsProps) {
     return currentEngine.voices.filter(
       (v) =>
         v.language === tts.language ||
-        // Treat "en" and "en-GB" as compatible with each other for filtering UX.
         (tts.language.startsWith("en") && v.language.startsWith("en"))
     );
   }, [currentEngine, tts.language]);
@@ -39,8 +39,6 @@ export function Settings({ onClose }: SettingsProps) {
   const onEngineChange = (engineId: string) => {
     const next = engines.find((e) => e.id === engineId);
     if (!next) return;
-    // Pick the first voice that matches the saved language; fall back to the
-    // first voice the engine ships.
     const voice =
       next.voices.find((v) => v.language === tts.language)?.id ??
       next.voices[0]?.id ??
@@ -51,7 +49,6 @@ export function Settings({ onClose }: SettingsProps) {
       tts.language;
     updateTts({ engine: engineId, voice, language });
   };
-
   const onLanguageChange = (lang: string) => {
     if (!currentEngine) return;
     const voice =
@@ -64,19 +61,34 @@ export function Settings({ onClose }: SettingsProps) {
   return (
     <div className="settings-view">
       <div className="settings-header">
-        <button onClick={onClose}>← 返回</button>
-        <h1>设置</h1>
+        <button onClick={onClose}>{t("settings.back")}</button>
+        <h1>{t("settings.title")}</h1>
         <div style={{ flex: 1 }} />
       </div>
 
       <div className="settings-body">
+        {/* Interface */}
         <section className="settings-section">
-          <h2>语音生成</h2>
-          <p className="settings-hint">
-            选择 TTS 引擎、音色、语言和语速。设置随时生效，下次播放即用。
-          </p>
+          <h2>{t("settings.ui")}</h2>
+          <Row label={t("settings.uiLanguage")}>
+            <select
+              value={reader.uiLanguage}
+              onChange={(e) =>
+                updateReader({ uiLanguage: e.target.value as "zh" | "en" })
+              }
+            >
+              <option value="zh">{t("settings.uiLanguage.zh")}</option>
+              <option value="en">{t("settings.uiLanguage.en")}</option>
+            </select>
+          </Row>
+        </section>
 
-          <Row label="引擎">
+        {/* TTS */}
+        <section className="settings-section">
+          <h2>{t("settings.tts")}</h2>
+          <p className="settings-hint">{t("settings.tts.hint")}</p>
+
+          <Row label={t("settings.tts.engine")}>
             <select
               value={tts.engine}
               onChange={(e) => onEngineChange(e.target.value)}
@@ -92,7 +104,7 @@ export function Settings({ onClose }: SettingsProps) {
             )}
           </Row>
 
-          <Row label="语言">
+          <Row label={t("settings.tts.language")}>
             <select
               value={tts.language}
               onChange={(e) => onLanguageChange(e.target.value)}
@@ -106,7 +118,7 @@ export function Settings({ onClose }: SettingsProps) {
             </select>
           </Row>
 
-          <Row label="音色">
+          <Row label={t("settings.tts.voice")}>
             <select
               value={tts.voice}
               onChange={(e) => updateTts({ voice: e.target.value })}
@@ -123,7 +135,7 @@ export function Settings({ onClose }: SettingsProps) {
             </select>
           </Row>
 
-          <Row label={`语速 ${tts.speed.toFixed(2)}x`}>
+          <Row label={`${t("settings.tts.speed")} ${tts.speed.toFixed(2)}x`}>
             <input
               type="range"
               min="0.5"
@@ -137,10 +149,11 @@ export function Settings({ onClose }: SettingsProps) {
           </Row>
         </section>
 
+        {/* Reading */}
         <section className="settings-section">
-          <h2>阅读</h2>
+          <h2>{t("settings.reading")}</h2>
 
-          <Row label="字号">
+          <Row label={t("settings.reading.fontSize")}>
             <select
               value={reader.fontSize}
               onChange={(e) =>
@@ -149,31 +162,73 @@ export function Settings({ onClose }: SettingsProps) {
                 })
               }
             >
-              <option value="small">小</option>
-              <option value="medium">中</option>
-              <option value="large">大</option>
+              <option value="small">{t("settings.reading.fontSize.small")}</option>
+              <option value="medium">{t("settings.reading.fontSize.medium")}</option>
+              <option value="large">{t("settings.reading.fontSize.large")}</option>
             </select>
           </Row>
 
-          <Row label="主题">
+          <Row label={t("settings.reading.fontSizePx")}>
+            <div className="font-px-row">
+              <input
+                type="number"
+                min={12}
+                max={40}
+                step={1}
+                value={reader.fontSizePx || ""}
+                placeholder={t("settings.reading.fontSizePx.usePreset")}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  updateReader({ fontSizePx: Number.isFinite(v) ? v : 0 });
+                }}
+              />
+              <input
+                type="range"
+                min={12}
+                max={40}
+                step={1}
+                value={reader.fontSizePx || 19}
+                onChange={(e) => updateReader({ fontSizePx: parseInt(e.target.value, 10) })}
+              />
+              {reader.fontSizePx > 0 && (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => updateReader({ fontSizePx: 0 })}
+                >
+                  {t("settings.reading.fontSizePx.usePreset")}
+                </button>
+              )}
+            </div>
+          </Row>
+
+          <Row label={t("settings.reading.theme")}>
             <select
               value={reader.background}
               onChange={(e) => updateReader({ background: e.target.value })}
             >
-              <option value="white">白</option>
-              <option value="warm-paper">暖纸</option>
-              <option value="sepia">古书</option>
-              <option value="eye-protect-green">护眼绿</option>
-              <option value="gray">中灰</option>
-              <option value="low-contrast">低对比</option>
-              <option value="cool-paper">冷纸</option>
-              <option value="rose">玫瑰</option>
-              <option value="dark">深色</option>
-              <option value="black">纯黑</option>
+              {(
+                [
+                  "white",
+                  "warm-paper",
+                  "sepia",
+                  "eye-protect-green",
+                  "gray",
+                  "low-contrast",
+                  "cool-paper",
+                  "rose",
+                  "dark",
+                  "black",
+                ] as const
+              ).map((id) => (
+                <option key={id} value={id}>
+                  {t(`theme.${id}` as MessageKey)}
+                </option>
+              ))}
             </select>
           </Row>
 
-          <Row label={`亮度 ${(reader.brightness * 100).toFixed(0)}%`}>
+          <Row label={`${t("settings.reading.brightness")} ${(reader.brightness * 100).toFixed(0)}%`}>
             <input
               type="range"
               min="0.3"
@@ -185,14 +240,37 @@ export function Settings({ onClose }: SettingsProps) {
               }
             />
           </Row>
+
+          <Row label={t("settings.reading.pageTurnMode")}>
+            <select
+              value={reader.pageTurnMode}
+              onChange={(e) =>
+                updateReader({
+                  pageTurnMode: e.target.value as "tap" | "swipe",
+                })
+              }
+            >
+              <option value="tap">{t("settings.reading.pageTurnMode.tap")}</option>
+              <option value="swipe">{t("settings.reading.pageTurnMode.swipe")}</option>
+            </select>
+          </Row>
+
+          <Row label={t("settings.reading.menuAutoHide")}>
+            <select
+              value={reader.menuAutoHide ? "on" : "off"}
+              onChange={(e) =>
+                updateReader({ menuAutoHide: e.target.value === "on" })
+              }
+            >
+              <option value="off">{t("settings.reading.menuAutoHide.off")}</option>
+              <option value="on">{t("settings.reading.menuAutoHide.on")}</option>
+            </select>
+          </Row>
         </section>
 
         <section className="settings-section">
-          <h2>关于</h2>
-          <div className="settings-meta">
-            Kokoro 支持 9 种语言（含中文 Mandarin）。Windows 用户如果不想配置
-            CUDA，建议直接选 Kokoro。
-          </div>
+          <h2>{t("settings.about")}</h2>
+          <div className="settings-meta">{t("settings.about.kokoroNote")}</div>
         </section>
       </div>
     </div>

@@ -330,14 +330,11 @@ pub async fn play_cached_or_generate(
         .map_err(|e| e.to_string())?;
 
     if !resp.status().is_success() {
-        let body: SidecarErrorBody = resp
-            .json()
-            .await
-            .unwrap_or(SidecarErrorBody { reason: "unknown".into(), message: None });
+        let status = resp.status();
+        let raw = resp.text().await.unwrap_or_default();
+        let summary = parse_sidecar_error(&raw);
         return Err(format!(
-            "tts not ready: {} ({})",
-            body.reason,
-            body.message.unwrap_or_default()
+            "tts not ready ({status}): {summary}"
         ));
     }
     let body: SidecarSynthResult = resp.json().await.map_err(|e| e.to_string())?;
@@ -439,4 +436,92 @@ fn load_pages_for_scope(
         }
     }
     Ok(out)
+}
+
+/// Best-effort extraction of a useful message from a sidecar error body.
+///
+/// The sidecar's NotReadyError handler returns `{reason, message, paths}`.
+/// Fallthrough Python exceptions return `{reason, message, traceback}`.
+/// FastAPI's validation errors return `{detail: [{loc, msg, type}, ...]}`
+/// or `{detail: "..."}` for HTTPException. We try each shape and finally
+/// fall back to the raw body so the UI never shows just "unknown".
+fn parse_sidecar_error(raw: &str) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
+        // Our own structured error.
+        if let (Some(reason), msg) = (v.get("reason").and_then(|x| x.as_str()), v.get("message").and_then(|x| x.as_str())) {
+            return match msg {
+                Some(m) if !m.is_empty() => format!("{reason}: {m}"),
+                _ => reason.to_string(),
+            };
+        }
+        // FastAPI HTTPException: {"detail": "..."}.
+        if let Some(detail) = v.get("detail") {
+            if let Some(s) = detail.as_str() {
+                return s.to_string();
+            }
+            // FastAPI validation error: {"detail": [{loc, msg, type}, ...]}.
+            if let Some(arr) = detail.as_array() {
+                let parts: Vec<String> = arr
+                    .iter()
+                    .filter_map(|e| {
+                        let msg = e.get("msg").and_then(|x| x.as_str())?;
+                        let loc = e
+                            .get("loc")
+                            .and_then(|x| x.as_array())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_i64().map(|i| i.to_string())))
+                                    .collect::<Vec<_>>()
+                                    .join(".")
+                            })
+                            .unwrap_or_default();
+                        Some(format!("{loc}: {msg}"))
+                    })
+                    .collect();
+                if !parts.is_empty() {
+                    return parts.join("; ");
+                }
+            }
+        }
+    }
+    if raw.is_empty() {
+        "<empty response body>".into()
+    } else {
+        raw.chars().take(240).collect::<String>()
+    }
+}
+
+#[cfg(test)]
+mod parse_error_tests {
+    use super::parse_sidecar_error;
+
+    #[test]
+    fn structured_reason_and_message() {
+        let r = parse_sidecar_error(r#"{"reason":"model_path_missing","message":"not found","paths":["/x"]}"#);
+        assert_eq!(r, "model_path_missing: not found");
+    }
+
+    #[test]
+    fn fastapi_validation_error() {
+        let r = parse_sidecar_error(r#"{"detail":[{"type":"missing","loc":["query","req"],"msg":"Field required","input":null}]}"#);
+        assert!(r.contains("Field required"), "got: {r}");
+        assert!(r.contains("req"), "got: {r}");
+    }
+
+    #[test]
+    fn fastapi_string_detail() {
+        let r = parse_sidecar_error(r#"{"detail":"unknown job"}"#);
+        assert_eq!(r, "unknown job");
+    }
+
+    #[test]
+    fn empty_body() {
+        assert_eq!(parse_sidecar_error(""), "<empty response body>");
+    }
+
+    #[test]
+    fn non_json_falls_through_to_raw() {
+        let r = parse_sidecar_error("plain text crash");
+        assert_eq!(r, "plain text crash");
+    }
 }

@@ -16,6 +16,7 @@ interface ReaderState {
   prev: () => Promise<void>;
   toggleControls: () => void;
   hideControls: () => void;
+  showControls: () => void;
   setTocOpen: (v: boolean) => void;
 }
 
@@ -70,5 +71,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   toggleControls: () =>
     set((s) => ({ controlsVisible: !s.controlsVisible })),
   hideControls: () => set({ controlsVisible: false }),
+  showControls: () => set({ controlsVisible: true }),
   setTocOpen: (v: boolean) => set({ tocOpen: v }),
 }));

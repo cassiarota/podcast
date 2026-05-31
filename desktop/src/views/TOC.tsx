@@ -1,4 +1,5 @@
 import { useReaderStore } from "../state/reader";
+import { useT } from "../lib/i18n";
 import { api } from "../lib/api";
 
 interface TOCProps {
@@ -7,6 +8,7 @@ interface TOCProps {
 }
 
 export function TOC({ open, onClose }: TOCProps) {
+  const t = useT();
   const sections = useReaderStore((s) => s.sections);
   const openBookId = useReaderStore((s) => s.openBookId);
   const goTo = useReaderStore((s) => s.goTo);
@@ -24,7 +26,7 @@ export function TOC({ open, onClose }: TOCProps) {
 
   return (
     <div className={`toc ${open ? "open" : ""}`}>
-      <h3>Contents</h3>
+      <h3>{t("reader.contents")}</h3>
       <ul>
         {sections.map((s) => (
           <li key={s.id} onClick={() => jumpToSection(s.id)}>

@@ -50,8 +50,39 @@ pub struct ReadingPosition {
 pub struct ReaderSettings {
     #[serde(rename = "fontSize")]
     pub font_size: String,
+    /// Custom font size in px; when > 0 overrides the preset (range clamped
+    /// by the UI to 12..40).
+    #[serde(rename = "fontSizePx", default)]
+    pub font_size_px: f64,
     pub background: String,
     pub brightness: f64,
+    /// `"zh"` or `"en"` — language of the app chrome (not the TTS voice).
+    #[serde(rename = "uiLanguage", default = "default_ui_language")]
+    pub ui_language: String,
+    /// `"tap"` or `"swipe"` — how the reader advances pages.
+    #[serde(rename = "pageTurnMode", default = "default_page_turn_mode")]
+    pub page_turn_mode: String,
+    /// Whether the controls overlay should auto-hide after a delay.
+    #[serde(rename = "menuAutoHide", default = "default_menu_auto_hide")]
+    pub menu_auto_hide: bool,
+}
+
+fn default_ui_language() -> String { "zh".into() }
+fn default_page_turn_mode() -> String { "tap".into() }
+fn default_menu_auto_hide() -> bool { false }
+
+impl Default for ReaderSettings {
+    fn default() -> Self {
+        Self {
+            font_size: "medium".into(),
+            font_size_px: 0.0,
+            background: "warm-paper".into(),
+            brightness: 1.0,
+            ui_language: default_ui_language(),
+            page_turn_mode: default_page_turn_mode(),
+            menu_auto_hide: default_menu_auto_hide(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -294,12 +325,12 @@ pub fn get_reader_settings(state: State<AppState>) -> Result<ReaderSettings, Str
         .optional()
         .map_err(|e| e.to_string())?;
     match value {
-        Some(v) => serde_json::from_str::<ReaderSettings>(&v).map_err(|e| e.to_string()),
-        None => Ok(ReaderSettings {
-            font_size: "medium".into(),
-            background: "warm-paper".into(),
-            brightness: 1.0,
-        }),
+        Some(v) => {
+            // Be tolerant: if old rows lack the new fields, deserialize via
+            // serde defaults rather than failing the whole call.
+            serde_json::from_str::<ReaderSettings>(&v).or_else(|_| Ok(ReaderSettings::default()))
+        }
+        None => Ok(ReaderSettings::default()),
     }
 }
 

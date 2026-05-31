@@ -9,8 +9,12 @@ interface SettingsState {
 
 const defaults: ReaderSettings = {
   fontSize: "medium",
+  fontSizePx: 0,
   background: "warm-paper",
   brightness: 1,
+  uiLanguage: "zh",
+  pageTurnMode: "tap",
+  menuAutoHide: false,
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
