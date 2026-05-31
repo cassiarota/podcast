@@ -26,7 +26,9 @@ export function TOC({ open, onClose }: TOCProps) {
 
   return (
     <div className={`toc ${open ? "open" : ""}`}>
-      <h3>{t("reader.contents")}</h3>
+      <div className="toc-header">
+        <h3>{t("reader.contents")}</h3>
+      </div>
       <ul>
         {sections.map((s) => (
           <li key={s.id} onClick={() => jumpToSection(s.id)}>
@@ -34,6 +36,18 @@ export function TOC({ open, onClose }: TOCProps) {
           </li>
         ))}
       </ul>
+      {/* Thin collapse rail on the right edge — click to close. */}
+      <button
+        className="toc-collapse"
+        aria-label={t("reader.contents")}
+        title={t("reader.contents")}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        ‹
+      </button>
     </div>
   );
 }

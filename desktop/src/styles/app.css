@@ -87,11 +87,18 @@ body {
   flex-wrap: wrap;
 }
 .controls.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
-.controls button { background: #333; color: #eee; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+.controls, .controls * {
+  /* Don't inherit the reader's --font-size so the menu stays compact even
+   * when the user picks a large reading font. Matches the Settings page. */
+  font-size: 13px;
+}
+.controls button { background: #333; color: #eee; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
 .controls button:hover { background: #444; }
-.controls select { background: #333; color: #eee; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; }
+.controls select { background: #333; color: #eee; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-size: 12px; }
+.controls label { display: inline-flex; align-items: center; gap: 4px; color: #ccc; font-size: 12px; }
+.controls input[type="range"] { width: 110px; }
 .controls .spacer { flex: 1; }
-.progress { font-variant-numeric: tabular-nums; font-size: 14px; }
+.progress { font-variant-numeric: tabular-nums; font-size: 13px; color: #ccc; }
 .progress-badge {
   position: fixed; right: 14px; bottom: 14px; z-index: 4;
   background: rgba(0,0,0,0.55); color: #fff;
@@ -105,14 +112,23 @@ body {
 .toc {
   position: fixed; top: 0; left: 0; bottom: 0; width: 320px;
   background: rgba(30,30,30,0.97); color: #eee;
-  padding: 20px; overflow-y: auto; z-index: 10;
+  padding: 20px 32px 20px 20px; overflow-y: auto; z-index: 10;
   transform: translateX(-100%); transition: transform 0.2s;
 }
 .toc.open { transform: translateX(0); }
-.toc h3 { margin-top: 0; }
-.toc ul { list-style: none; padding: 0; margin: 0; }
+.toc-header { display: flex; align-items: center; gap: 8px; }
+.toc h3 { margin: 0; flex: 1; }
+.toc ul { list-style: none; padding: 0; margin: 12px 0 0; }
 .toc li { padding: 8px 4px; cursor: pointer; border-bottom: 1px solid #333; }
 .toc li:hover { background: #2a2a2a; }
+.toc-collapse {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: 18px; padding: 0; border: 0; border-left: 1px solid #2a2a2a;
+  background: rgba(255,255,255,0.04); color: #aaa;
+  cursor: pointer; font-size: 18px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.toc-collapse:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
 /* Settings view */
 .settings-view {

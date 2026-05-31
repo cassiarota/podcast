@@ -18,6 +18,8 @@ export interface PendingJob {
   chapters: PendingChapter[];
   /** Lazy-loaded once the user expands the row. */
   chaptersLoaded: boolean;
+  /** True while startPending is awaiting backend job creation. */
+  starting?: boolean;
 }
 
 export interface ActiveJob {
@@ -165,34 +167,61 @@ export const useJobsStore = create<JobsState>((set, get) => {
     startPending: async (pendingId) => {
       const p = get().pending.find((x) => x.id === pendingId);
       if (!p) return;
+      // Mark this pending row busy so the UI can disable buttons + show a
+      // "starting…" indicator while we await ensure_running + startTtsJob.
+      // Cold-start Kokoro can take 30–60 s and the original UX looked
+      // frozen during that window.
+      set((s) => ({
+        pending: s.pending.map((x) =>
+          x.id === pendingId ? { ...x, starting: true } : x
+        ),
+      }));
       const checked = p.chapters.filter((c) => c.checked);
-      // Defensive: if chapters haven't loaded or all unchecked, treat as
-      // "whole book" intent so users aren't blocked by network races.
       const scopes: string[] =
         checked.length === 0 || checked.length === p.chapters.length
           ? ["whole_book"]
           : checked.map((c) => `section:${c.id}`);
 
-      // Fire each scope as its own job; track them in `active`.
-      for (const scope of scopes) {
+      // Push placeholder active rows IMMEDIATELY so the user sees movement
+      // while ensure_running churns. We swap each placeholder's id to the
+      // real backend job id once startTtsJob resolves; the tts:progress
+      // listener then keeps it updated.
+      const placeholderIds = scopes.map((scp) => `placeholder-${pendingId}-${scp}`);
+      set((s) => ({
+        active: [
+          ...s.active,
+          ...scopes.map((scope, i) => ({
+            id: placeholderIds[i],
+            bookId: p.bookId,
+            title:
+              p.title + (scope === "whole_book" ? "" : ` · ${scopeLabel(scope, p)}`),
+            scope: `${scope} (启动中…)`,
+            progress: 0,
+            status: "running" as const,
+            startedAt: Date.now(),
+          })),
+        ],
+      }));
+
+      for (let i = 0; i < scopes.length; i++) {
+        const scope = scopes[i];
+        const placeholderId = placeholderIds[i];
         try {
           const job = await api.startTtsJob(p.bookId, scope, "");
           set((s) => ({
-            active: [
-              ...s.active,
-              {
-                id: job.id,
-                bookId: p.bookId,
-                title: p.title + (scope === "whole_book" ? "" : ` · ${scopeLabel(scope, p)}`),
-                scope,
-                progress: 0,
-                status: "running",
-                startedAt: Date.now(),
-              },
-            ],
+            active: s.active.map((a) =>
+              a.id === placeholderId ? { ...a, id: job.id, scope } : a
+            ),
           }));
         } catch (e) {
           console.error("[jobs] startTtsJob failed", scope, e);
+          set((s) => ({
+            active: s.active.map((a) =>
+              a.id === placeholderId
+                ? { ...a, status: "failed" as const, scope: `${scope} (失败)` }
+                : a
+            ),
+          }));
         }
       }
       get().removePending(pendingId);

@@ -63,8 +63,23 @@ pub fn run() {
 
             app.manage(AppState {
                 db: Arc::new(Mutex::new(conn)),
-                sidecar,
+                sidecar: sidecar.clone(),
             });
+
+            // Kick off TTS engine pre-warm in the background. Reads the
+            // user's saved TtsSettings (preload toggle + voice/language)
+            // from the freshly-opened DB. Non-blocking — the UI renders
+            // and books load even while Kokoro is still constructing its
+            // pipeline. By the time the user clicks ▶ Play the first time,
+            // the engine is usually already warm.
+            let app_handle = app.handle().clone();
+            let sidecar_for_preload = sidecar.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = preload_engine(app_handle, sidecar_for_preload).await {
+                    tracing::warn!("tts preload failed: {e:#}");
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -93,4 +108,65 @@ pub fn run() {
 pub fn handle_init_error(e: anyhow::Error) -> Result<()> {
     tracing::error!("init error: {e:?}");
     Err(e)
+}
+
+/// Background TTS pre-warm. Reads the user's saved TtsSettings and, if
+/// preload is enabled, fires a tiny synth request so the Kokoro pipeline
+/// (and misaki phonemizer if Chinese) is loaded before the user's first
+/// ▶ Play. Failures are logged but never surface to the UI — preload is
+/// a best-effort latency optimization.
+async fn preload_engine(
+    app: tauri::AppHandle,
+    sidecar: Arc<SidecarState>,
+) -> Result<()> {
+    use tauri::Manager;
+    // Let the UI render first.
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+    let state = app.state::<AppState>();
+    let tts = match crate::reader::get_tts_settings(state.clone()) {
+        Ok(t) => t,
+        Err(e) => return Err(anyhow::anyhow!("read settings: {e}")),
+    };
+    if !tts.preload {
+        tracing::info!("tts preload disabled by user setting");
+        return Ok(());
+    }
+    if tts.engine != "kokoro" {
+        // Qwen / stub don't benefit (qwen first-load is GPU-bound anyway,
+        // stub is fast).
+        return Ok(());
+    }
+
+    sidecar.ensure_running().await?;
+
+    let port = sidecar.port();
+    let url = format!("http://127.0.0.1:{port}/tts/realtime");
+    // Pick a short text in whatever language the user has saved. This
+    // triggers KPipeline construction for that lang_code.
+    let warm_text = if tts.language.starts_with("zh") || tts.voice.starts_with('z') {
+        "你好"
+    } else if tts.language.starts_with("ja") || tts.voice.starts_with('j') {
+        "こんにちは"
+    } else {
+        "Hello"
+    };
+    let req = serde_json::json!({
+        "text": warm_text,
+        "engine": "kokoro",
+        "voice": tts.voice,
+        "language": tts.language,
+        "speed": tts.speed,
+    });
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .unwrap();
+    tracing::info!("tts preload: warming voice={} lang={}", tts.voice, tts.language);
+    match client.post(&url).json(&req).send().await {
+        Ok(r) if r.status().is_success() => tracing::info!("tts preload: engine warm"),
+        Ok(r) => tracing::warn!("tts preload non-success: {}", r.status()),
+        Err(e) => tracing::warn!("tts preload request: {e}"),
+    }
+    Ok(())
 }

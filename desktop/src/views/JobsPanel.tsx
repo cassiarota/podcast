@@ -59,20 +59,22 @@ export function JobsPanel() {
                   <div className="jobs-pending-head">
                     <div className="jobs-pending-title">{p.title}</div>
                     <div className="jobs-pending-meta">
-                      {p.chaptersLoaded
+                      {p.starting
+                        ? "正在启动…"
+                        : p.chaptersLoaded
                         ? format(t("jobs.chaptersSelected"), { sel, total })
                         : t("jobs.loadingChapters")}
                     </div>
                     <button
                       className="primary"
-                      disabled={sel === 0}
+                      disabled={sel === 0 || !!p.starting}
                       onClick={() => startPending(p.id)}
                     >
                       {sel === total
                         ? t("jobs.startWhole")
                         : format(t("jobs.startSelected"), { n: sel })}
                     </button>
-                    <button onClick={() => removePending(p.id)}>
+                    <button onClick={() => removePending(p.id)} disabled={!!p.starting}>
                       {t("library.actions.cancel")}
                     </button>
                   </div>

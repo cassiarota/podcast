@@ -162,6 +162,50 @@ export function Settings({ onClose }: SettingsProps) {
               }
             />
           </Row>
+
+          <Row label={t("settings.tts.preload")}>
+            <select
+              value={tts.preload ? "on" : "off"}
+              onChange={(e) => updateTts({ preload: e.target.value === "on" })}
+            >
+              <option value="on">{t("settings.tts.preload.on")}</option>
+              <option value="off">{t("settings.tts.preload.off")}</option>
+            </select>
+          </Row>
+        </section>
+
+        {/* Storage */}
+        <section className="settings-section">
+          <h2>{t("settings.storage")}</h2>
+          <Row label={t("settings.storage.importsBackup")}>
+            <div className="font-px-row">
+              <div className="settings-meta" style={{ flex: 1, minWidth: 200 }}>
+                {tts.importsBackupDir || t("settings.storage.importsBackup.disabled")}
+              </div>
+              <button
+                type="button"
+                className="ghost"
+                onClick={async () => {
+                  const { open } = await import("@tauri-apps/plugin-dialog");
+                  const picked = await open({ directory: true, multiple: false });
+                  if (typeof picked === "string") {
+                    updateTts({ importsBackupDir: picked });
+                  }
+                }}
+              >
+                {t("settings.storage.importsBackup.pick")}
+              </button>
+              {tts.importsBackupDir && (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => updateTts({ importsBackupDir: null })}
+                >
+                  {t("settings.storage.importsBackup.clear")}
+                </button>
+              )}
+            </div>
+          </Row>
         </section>
 
         {/* Reading */}

@@ -97,7 +97,13 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
     const target = e.currentTarget;
     const width = target.clientWidth;
 
-    // 1. If menu visible → any pointer up hides it. Don't turn page.
+    // 1. If TOC is open, any pointer up on the main area closes it.
+    //    Don't turn page in that case.
+    if (tocOpen) {
+      setTocOpen(false);
+      return;
+    }
+    // 2. If menu visible → any pointer up hides it. Don't turn page.
     if (controlsVisible) {
       hideControls();
       return;

@@ -53,6 +53,10 @@ export interface TtsSettings {
   voice: string;
   language: string;
   speed: number;
+  /** Pre-warm the engine in the background on app boot. */
+  preload: boolean;
+  /** Optional directory where a plain-text copy of each import is dropped. */
+  importsBackupDir: string | null;
 }
 
 export interface LanguageInfo {

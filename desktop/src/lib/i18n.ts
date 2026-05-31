@@ -82,6 +82,14 @@ interface Messages {
   "settings.tts.language": string;
   "settings.tts.voice": string;
   "settings.tts.speed": string;
+  "settings.tts.preload": string;
+  "settings.tts.preload.on": string;
+  "settings.tts.preload.off": string;
+  "settings.storage": string;
+  "settings.storage.importsBackup": string;
+  "settings.storage.importsBackup.pick": string;
+  "settings.storage.importsBackup.disabled": string;
+  "settings.storage.importsBackup.clear": string;
   "settings.reading": string;
   "settings.reading.fontSize": string;
   "settings.reading.fontSize.small": string;
@@ -181,6 +189,14 @@ const ZH: Messages = {
   "settings.tts.language": "语言",
   "settings.tts.voice": "音色",
   "settings.tts.speed": "语速",
+  "settings.tts.preload": "启动预热",
+  "settings.tts.preload.on": "应用启动时静默预加载（推荐）",
+  "settings.tts.preload.off": "首次播放时再加载",
+  "settings.storage": "存储",
+  "settings.storage.importsBackup": "导入备份目录",
+  "settings.storage.importsBackup.pick": "选择目录…",
+  "settings.storage.importsBackup.disabled": "（未设置 — 不保存额外副本）",
+  "settings.storage.importsBackup.clear": "清除",
   "settings.reading": "阅读",
   "settings.reading.fontSize": "字号档位",
   "settings.reading.fontSize.small": "小",
@@ -279,6 +295,14 @@ const EN: Messages = {
   "settings.tts.language": "Language",
   "settings.tts.voice": "Voice",
   "settings.tts.speed": "Speed",
+  "settings.tts.preload": "Pre-warm on launch",
+  "settings.tts.preload.on": "Preload silently on app boot (recommended)",
+  "settings.tts.preload.off": "Load on first ▶ Play",
+  "settings.storage": "Storage",
+  "settings.storage.importsBackup": "Import backup directory",
+  "settings.storage.importsBackup.pick": "Pick a folder…",
+  "settings.storage.importsBackup.disabled": "(unset — no extra copy)",
+  "settings.storage.importsBackup.clear": "Clear",
   "settings.reading": "Reading",
   "settings.reading.fontSize": "Font size preset",
   "settings.reading.fontSize.small": "Small",

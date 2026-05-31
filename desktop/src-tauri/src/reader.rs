@@ -91,7 +91,17 @@ pub struct TtsSettings {
     pub voice: String,
     pub language: String,
     pub speed: f64,
+    /// When true the Tauri host pre-warms the engine in the background
+    /// shortly after app boot, so the first ▶ Play feels instant.
+    #[serde(default = "default_preload")]
+    pub preload: bool,
+    /// Optional directory where the importer also drops a plain-text copy
+    /// of each imported book. None = don't keep an extra copy.
+    #[serde(rename = "importsBackupDir", default)]
+    pub imports_backup_dir: Option<String>,
 }
+
+fn default_preload() -> bool { true }
 
 impl Default for TtsSettings {
     fn default() -> Self {
@@ -100,6 +110,8 @@ impl Default for TtsSettings {
             voice: default_voice_for("kokoro").to_string(),
             language: "en".into(),
             speed: 1.0,
+            preload: true,
+            imports_backup_dir: None,
         }
     }
 }
@@ -164,7 +176,73 @@ pub fn import_book(
     .map_err(|e| format!("{e:#}"))?;
 
     let book = load_book(&conn, &book_id).map_err(|e| format!("{e:#}"))?;
+    drop(conn);
+
+    // If the user configured a backup directory, drop a plain-text copy of
+    // the imported book there. Failures are logged but don't fail the
+    // import — the book is already in the DB.
+    if let Ok(tts) = get_tts_settings(state.clone()) {
+        if let Some(dir) = tts.imports_backup_dir.as_deref() {
+            if let Err(e) = copy_import_to_backup(state.clone(), &book, dir) {
+                tracing::warn!("imports backup failed: {e}");
+            }
+        }
+    }
     Ok(book)
+}
+
+fn copy_import_to_backup(
+    state: State<AppState>,
+    book: &Book,
+    dir_str: &str,
+) -> Result<()> {
+    use std::io::Write;
+    let dir = PathBuf::from(shellexpand_home(dir_str));
+    std::fs::create_dir_all(&dir)?;
+    let conn = state.db.lock();
+    // Concatenate the book's pages back into a single text dump.
+    let mut stmt = conn.prepare(
+        "SELECT content FROM pages WHERE book_id = ?1 ORDER BY page_index",
+    )?;
+    let pages: Vec<String> = stmt
+        .query_map(params![book.id], |r| r.get::<_, String>(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt);
+    drop(conn);
+    let body = pages.join("\n\n");
+    let safe_title: String = book
+        .title
+        .chars()
+        .map(|c| if c == '/' || c == '\\' || c == ':' { '_' } else { c })
+        .collect();
+    let out = dir.join(format!("{} ({}).txt", safe_title, &book.id[..8]));
+    let mut f = std::fs::File::create(&out)?;
+    if let Some(author) = &book.author {
+        writeln!(f, "{}", book.title)?;
+        writeln!(f, "{}", author)?;
+        writeln!(f)?;
+    } else {
+        writeln!(f, "{}", book.title)?;
+        writeln!(f)?;
+    }
+    f.write_all(body.as_bytes())?;
+    tracing::info!("imports backup saved: {:?}", out);
+    Ok(())
+}
+
+/// Expand a leading `~` to the user's home dir. Anything else passes through.
+fn shellexpand_home(p: &str) -> String {
+    if let Some(rest) = p.strip_prefix("~/") {
+        if let Some(home) = dirs_home() {
+            return format!("{}/{}", home, rest);
+        }
+    }
+    p.to_string()
+}
+
+fn dirs_home() -> Option<String> {
+    std::env::var("HOME").ok()
 }
 
 #[tauri::command]
@@ -552,6 +630,8 @@ mod tests {
             voice: "default".into(),
             language: "zh".into(),
             speed: 1.25,
+            preload: true,
+            imports_backup_dir: None,
         };
         let json = serde_json::to_string(&s).unwrap();
         let back: TtsSettings = serde_json::from_str(&json).unwrap();

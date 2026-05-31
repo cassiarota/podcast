@@ -14,6 +14,8 @@ const defaults: TtsSettings = {
   voice: "af_heart",
   language: "en",
   speed: 1.0,
+  preload: true,
+  importsBackupDir: null,
 };
 
 export const useTtsSettingsStore = create<TtsSettingsState>((set, get) => ({
