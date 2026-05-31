@@ -2,6 +2,18 @@
 
 > See [`AGENT.md`](AGENT.md) for the canonical contributor rules. This file is the Claude-specific overlay.
 
+## Hard rule: restart the app after every fix the user can observe
+
+When you fix a bug or ship a feature that the user is testing in the running app, **kill the old `target/debug/podcast-reader` + sidecar processes and run `pnpm tauri dev` again** as the final step of the turn — not as a separate "do you want me to restart" prompt. The user's observed bug-fix loop is:
+
+> Click → see broken behavior → tell Claude → wait for fix → re-click.
+
+If you leave the old binary running, they re-click and see the same broken behavior because the old code is still in memory (Rust binary cached, Python sidecar already loaded). Past incidents:
+- `SynthRequest` 422 kept reproducing because the previous Tauri instance left a stale sidecar PID listening on 38219; my "fix" main.py never reached the user.
+- `tts not ready: unknown ()` was misdiagnosed for a full round because the new binary spawned but the old sidecar was answering.
+
+Concretely: `pkill -9 -f "target/debug/podcast-reader"; pkill -9 -f "sidecar/main.py"` before every `pnpm tauri dev`. Front-end-only changes (TS/CSS) hot-reload through Vite and don't need this — Rust or Python changes always do.
+
 ## Hard rule: keep all three platforms in sync
 
 When you fix a bug or change an algorithm, **find and fix every parallel implementation in the same commit.** Use the catalog in `AGENT.md` to discover the paired files. Concretely:
