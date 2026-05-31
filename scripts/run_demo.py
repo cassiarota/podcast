@@ -71,31 +71,38 @@ CREATE TABLE IF NOT EXISTS audio_chunks (
 """
 
 
+def is_heading_line(line: str) -> bool:
+    """Mirror of desktop/src-tauri/src/import_txt.rs::is_heading_line."""
+    trimmed = line.strip()
+    if not trimmed or len(trimmed.encode("utf-8")) > 80:
+        return False
+    if trimmed.startswith("第") and any(ch in trimmed for ch in "章节回卷篇"):
+        return True
+    if trimmed in {
+        "序章", "序言", "序", "楔子", "尾声", "番外", "终章", "终曲",
+        "正文卷", "终结", "前言", "后记", "致谢",
+    }:
+        return True
+    lower = trimmed.lower()
+    if any(lower.startswith(p) for p in ("chapter ", "part ", "book ", "section ")):
+        return True
+    if lower in {"prologue", "epilogue", "introduction", "preface", "foreword"}:
+        return True
+    ascii_letters = [c for c in trimmed if c.isascii() and c.isalpha()]
+    if len(ascii_letters) >= 2 and all(c.isupper() for c in ascii_letters):
+        return True
+    return False
+
+
 def split_into_sections(text: str) -> list[tuple[str, str, int, int]]:
     """Same heuristic as src/import_txt.rs::split_into_sections."""
-    out: list[tuple[str, str, int, int]] = []
-    lines = text.split("\n")
-    cur_start = 0
-    cur_title = ""
-    offset = 0
-    body_start = 0
-    body_text_chars: list[str] = []
-    cur_body_start = 0
-
-    # Reimplement the Rust algorithm: walk lines, detect heading,
-    # flush previous section when one is found.
     parts: list[tuple[str, int, int]] = []  # (title, start, end) by byte offset
     byte_cursor = 0
     pending_start = 0
     pending_title = ""
-    for line in lines:
+    for line in text.split("\n"):
         line_bytes = line.encode("utf-8")
-        is_heading = (
-            line.strip()
-            and len(line.strip()) < 80
-            and not any(c.islower() for c in line.strip())
-        )
-        if is_heading and byte_cursor > pending_start:
+        if is_heading_line(line) and byte_cursor > pending_start:
             parts.append((pending_title, pending_start, byte_cursor))
             pending_title = line.strip()
             pending_start = byte_cursor + len(line_bytes) + 1
@@ -140,8 +147,22 @@ def cache_key(text_hash: str, engine: str, voice: str, lang: str, speed: float) 
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="End-to-end import + TTS demo")
+    parser.add_argument("--book", type=Path, default=REPO / "demo.txt",
+                        help="Path to the TXT file to import. Default: ./demo.txt")
+    parser.add_argument("--max-pages", type=int, default=0,
+                        help="If >0, only synthesize the first N pages (useful for big books).")
+    parser.add_argument("--engine", default="stub", choices=["stub"],
+                        help="Engine to use. Only stub is supported inside this script — "
+                             "for real Kokoro/Qwen, launch desktop/sidecar/main.py.")
+    parser.add_argument("--voice", default="default")
+    parser.add_argument("--language", default="en")
+    args = parser.parse_args()
+
     print(f"[demo] Repo root: {REPO}")
-    demo_path = REPO / "demo.txt"
+    demo_path = args.book.expanduser().resolve()
     if not demo_path.exists():
         print(f"[demo] ERROR: {demo_path} missing")
         return 1
@@ -158,9 +179,10 @@ def main() -> int:
     source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     book_id = str(uuid.uuid4())
     now = int(time.time())
+    title = demo_path.stem or "Imported"
     conn.execute(
         "INSERT INTO books (id, title, author, source_format, source_path, source_hash, page_count, created_at) VALUES (?, ?, NULL, 'txt', ?, ?, 0, ?)",
-        (book_id, "Lighthouse Keeper Demo", str(demo_path), source_hash, now),
+        (book_id, title, str(demo_path), source_hash, now),
     )
 
     sections = split_into_sections(text)
@@ -189,13 +211,18 @@ def main() -> int:
     print(f"[demo] Paginated into {page_index} pages")
 
     engine = StubEngine()
-    voice = "default"
-    print(f"[demo] Synthesizing audio with engine={engine.name} voice={voice}")
+    voice = args.voice
+    language = args.language
+    pages_to_render = page_records
+    if args.max_pages and args.max_pages < len(page_records):
+        pages_to_render = page_records[: args.max_pages]
+        print(f"[demo] --max-pages={args.max_pages} (of {len(page_records)} total)")
+    print(f"[demo] Synthesizing {len(pages_to_render)} pages with engine={engine.name} voice={voice} language={language}")
 
     total_duration_ms = 0
-    for i, (page_id, page_text) in enumerate(page_records):
+    for i, (page_id, page_text) in enumerate(pages_to_render):
         text_hash = hashlib.sha256(page_text.encode("utf-8")).hexdigest()
-        key = cache_key(text_hash, engine.name, voice, "en", 1.0)
+        key = cache_key(text_hash, engine.name, voice, language, 1.0)
         wav_path = AUDIO_DIR / f"{key}.wav"
         duration_ms = engine.synthesize(page_text, str(wav_path), voice=voice)
         total_duration_ms += duration_ms
@@ -207,13 +234,15 @@ def main() -> int:
             ),
         )
         size_kb = wav_path.stat().st_size / 1024
-        print(f"[demo]   page {i+1}/{page_index}: {duration_ms} ms ({size_kb:.1f} KB) -> {wav_path.name}")
+        # Only print every 25th page when there are many, to keep output sane.
+        if len(pages_to_render) <= 30 or i < 5 or i % 25 == 0 or i == len(pages_to_render) - 1:
+            print(f"[demo]   page {i+1}/{len(pages_to_render)}: {duration_ms} ms ({size_kb:.1f} KB) -> {wav_path.name[:24]}…")
     conn.commit()
 
     # Verify the cache: replay the first page WITHOUT regenerating.
-    first_page_id, first_text = page_records[0]
+    first_page_id, first_text = pages_to_render[0]
     first_hash = hashlib.sha256(first_text.encode("utf-8")).hexdigest()
-    first_key = cache_key(first_hash, engine.name, voice, "en", 1.0)
+    first_key = cache_key(first_hash, engine.name, voice, language, 1.0)
     cur = conn.execute("SELECT path, duration_ms FROM audio_chunks WHERE cache_key = ?", (first_key,))
     row = cur.fetchone()
     assert row is not None, "cache lookup failed"
@@ -223,8 +252,8 @@ def main() -> int:
 
     total_size = sum(p.stat().st_size for p in AUDIO_DIR.glob("*.wav"))
     print(
-        f"\n[demo] DONE — {page_index} pages, "
-        f"{total_duration_ms / 1000:.1f}s total audio, "
+        f"\n[demo] DONE — {len(pages_to_render)} pages synthesized out of "
+        f"{page_index} total, {total_duration_ms / 1000:.1f}s total audio, "
         f"{total_size / 1024:.1f} KB on disk"
     )
     print(f"[demo] WAVs:  {AUDIO_DIR}")

@@ -76,6 +76,34 @@ object TxtImporter {
 
     private data class RawSection(val title: String, val body: String, val offset: Int, val len: Int)
 
+    private val CHINESE_HEADINGS = setOf(
+        "序章", "序言", "序", "楔子", "尾声", "番外", "终章", "终曲",
+        "正文卷", "终结", "前言", "后记", "致谢",
+    )
+
+    /**
+     * Heading detection — mirrors desktop/src-tauri/src/import_txt.rs::is_heading_line.
+     *
+     * Previously used a naive "no lowercase letters" check which falsely flagged
+     * every short Chinese line as a heading. This now recognizes Chinese chapter
+     * markers (第N章/节/回/卷/篇), common Chinese heading tokens, English chapter
+     * markers, and ALL-CAPS English headings.
+     */
+    internal fun isHeadingLine(line: String): Boolean {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty() || trimmed.toByteArray(Charsets.UTF_8).size > 80) return false
+        if (trimmed.startsWith("第") && trimmed.any { it in "章节回卷篇" }) return true
+        if (trimmed in CHINESE_HEADINGS) return true
+        val lower = trimmed.lowercase()
+        if (lower.startsWith("chapter ") || lower.startsWith("part ")
+            || lower.startsWith("book ") || lower.startsWith("section ")
+        ) return true
+        if (lower in setOf("prologue", "epilogue", "introduction", "preface", "foreword")) return true
+        val asciiLetters = trimmed.filter { it.code < 128 && it.isLetter() }
+        if (asciiLetters.length >= 2 && asciiLetters.all { it.isUpperCase() }) return true
+        return false
+    }
+
     private fun splitIntoSections(text: String): List<RawSection> {
         val out = mutableListOf<RawSection>()
         val bytes = text.toByteArray(Charsets.UTF_8)
@@ -85,9 +113,7 @@ object TxtImporter {
         for (line in text.split("\n")) {
             val lineBytes = line.toByteArray(Charsets.UTF_8).size
             val trimmed = line.trim()
-            val isHeading = trimmed.isNotEmpty()
-                && trimmed.length < 80
-                && trimmed.none { it.isLowerCase() }
+            val isHeading = isHeadingLine(line)
             if (isHeading && byteCursor > pendingStart) {
                 val bodySlice = bytes.decodeToString(pendingStart, byteCursor)
                 if (bodySlice.isNotBlank()) {

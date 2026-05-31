@@ -84,6 +84,56 @@ struct RawSection<'a> {
     len: usize,
 }
 
+/// Heuristic chapter / section heading detection.
+///
+/// Originally only handled ALL-CAPS English (the dumb `no_lowercase` check),
+/// which falsely flagged every short Chinese line as a heading. We now
+/// recognize:
+///   - Chinese chapter markers (`第N章 / 第N节 / 第N回 / 第N卷 / 第N篇`)
+///   - Common Chinese single-token sections (`序章`, `正文卷`, `楔子`, ...)
+///   - English chapter markers (`Chapter N`, `Part N`, `PROLOGUE`, ...)
+///   - ALL-CAPS English headings with at least two ASCII letters
+fn is_heading_line(trimmed: &str) -> bool {
+    if trimmed.is_empty() || trimmed.len() > 80 {
+        return false;
+    }
+    // Chinese chapter markers — "第N章" / "第N节" / "第N回" / "第N卷" / "第N篇"
+    if trimmed.starts_with('第') {
+        for ch in ['章', '节', '回', '卷', '篇'] {
+            if trimmed.contains(ch) {
+                return true;
+            }
+        }
+    }
+    // Common Chinese standalone heading tokens.
+    const CHINESE_HEADINGS: &[&str] = &[
+        "序章", "序言", "序", "楔子", "尾声", "番外", "终章", "终曲",
+        "正文卷", "终结", "前言", "后记", "致谢",
+    ];
+    if CHINESE_HEADINGS.iter().any(|h| trimmed == *h) {
+        return true;
+    }
+    // English chapter / part markers (case-insensitive).
+    let lower = trimmed.to_ascii_lowercase();
+    for prefix in ["chapter ", "part ", "book ", "section "] {
+        if lower.starts_with(prefix) {
+            return true;
+        }
+    }
+    for token in ["prologue", "epilogue", "introduction", "preface", "foreword"] {
+        if lower == token {
+            return true;
+        }
+    }
+    // ALL-CAPS English heading — at least two ASCII letters, no lowercase
+    // ASCII letters anywhere.
+    let ascii_letters: Vec<char> = trimmed.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    if ascii_letters.len() >= 2 && ascii_letters.iter().all(|c| c.is_ascii_uppercase()) {
+        return true;
+    }
+    false
+}
+
 fn split_into_sections(text: &str) -> Vec<RawSection<'_>> {
     let mut out: Vec<RawSection> = Vec::new();
     let bytes = text.as_bytes();
@@ -98,11 +148,7 @@ fn split_into_sections(text: &str) -> Vec<RawSection<'_>> {
         if at_end || bytes[i] == b'\n' {
             let line = &text[line_start..i];
             let trimmed = line.trim();
-            let is_heading = !trimmed.is_empty()
-                && trimmed.len() < 80
-                && trimmed
-                    .chars()
-                    .all(|c| !c.is_lowercase());
+            let is_heading = is_heading_line(trimmed);
 
             if is_heading && i > cur_start {
                 let body = &text[cur_start..line_start];
@@ -247,6 +293,44 @@ mod tests {
         let sections = split_into_sections(s);
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].title, "");
+    }
+
+    #[test]
+    fn split_into_sections_detects_chinese_chapter_markers() {
+        let s = "第1章 师傅\n\n李火旺举起手中的捣药杆，砸在罐里。\n\n第2章 苦难\n\n他继续干活。\n";
+        let sections = split_into_sections(s);
+        assert_eq!(sections.len(), 2);
+        assert_eq!(sections[0].title, "第1章 师傅");
+        assert_eq!(sections[1].title, "第2章 苦难");
+    }
+
+    #[test]
+    fn split_into_sections_does_not_falsely_flag_short_chinese_dialogue() {
+        // Short Chinese lines (dialogue, narrative) must NOT be treated as
+        // headings just because they have no ASCII lowercase letters.
+        let s = "第1章 师傅\n\n“啊！”一声女人的惊恐尖叫。\n\n他无视嘈杂，继续干活。\n\n“俺就弄一下。”\n";
+        let sections = split_into_sections(s);
+        assert_eq!(sections.len(), 1, "got {} sections", sections.len());
+        assert_eq!(sections[0].title, "第1章 师傅");
+    }
+
+    #[test]
+    fn split_into_sections_handles_dashes_and_punctuation() {
+        // Pure-punctuation lines like "------" must not be flagged.
+        let s = "------------\n\nbody line\n\n====\n\nanother body\n";
+        let sections = split_into_sections(s);
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].title, "");
+    }
+
+    #[test]
+    fn split_into_sections_recognizes_common_chinese_sections() {
+        let s = "序章\n\n开头介绍。\n\n第1章 开始\n\n正文。\n\n尾声\n\n结束语。\n";
+        let sections = split_into_sections(s);
+        assert_eq!(sections.len(), 3);
+        assert_eq!(sections[0].title, "序章");
+        assert_eq!(sections[1].title, "第1章 开始");
+        assert_eq!(sections[2].title, "尾声");
     }
 
     #[test]

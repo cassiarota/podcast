@@ -194,13 +194,42 @@ python3.12 -m unittest discover -s tests
 
 ## 运行 Demo（不需要真实 TTS 模型）
 
+`scripts/run_demo.py` 用 stub 引擎（正弦波）走完整 import → 分章节 → 分页 → 合成 → 缓存 → 命中验证 流程，不需要 Kokoro / Qwen 本体。支持任意 TXT 路径：
+
 ```sh
+# 用仓库自带的英文 demo.txt（默认）
 python3.12 scripts/run_demo.py
+
+# 用任意中文/英文 TXT，只生成前 10 页音频
+python3.12 scripts/run_demo.py --book ~/Downloads/某本小说.txt --max-pages 10 \
+    --voice zf_xiaoxiao --language zh
 ```
 
-`scripts/run_demo.py` 演示完整流程：导入 `demo.txt` → 分章节分页 → 用 stub 引擎合成 3 段 WAV → 写入 SQLite → 验证缓存命中。输出在 `demo_runtime/audio_cache/`，可用 `afplay`（macOS）或任意播放器试听。
+输出在 `demo_runtime/audio_cache/`，可用 `afplay`（macOS）或任意播放器试听。
 
-> Stub 引擎产出的是正弦波模拟语音，仅用于打通流程；真正的人声音频需安装 Kokoro 或 Qwen。
+> Stub 引擎产出的是正弦波，仅用于打通流程；真正的人声音频需安装 Kokoro 或 Qwen，详见 [`macos/README.md`](macos/README.md) 或 [`windows/INSTALL_zh-CN.md`](windows/INSTALL_zh-CN.md)。
+
+### 端到端用真 Kokoro 跑一本中文书
+
+在 macOS 上读完整中文书的最短路径：
+
+```sh
+# 1. 拉 Kokoro 模型（约 330 MB）
+git lfs install && git lfs pull
+
+# 2. 装 Kokoro Python 依赖到子进程 venv
+bash macos/sidecar-env/activate.sh   # 装 fastapi/uvicorn/numpy/soundfile/kokoro
+
+# 3. 启动 Tauri 桌面应用
+cd desktop && pnpm install && pnpm tauri dev
+
+# 4. 在应用里
+#    a) 右上角 ⚙ 设置 → 引擎 Kokoro 82M → 语言 中文(Mandarin) → 音色 zf_xiaoxiao
+#    b) 返回书架 → + Import a book → 选择你的 .txt
+#    c) 打开书 → 底栏 ▶ 播放
+```
+
+第一次 ▶ 播放时 Kokoro 才加载模型，之后单页合成 ~2 秒；缓存命中时立即开播。
 
 ## 文档索引
 
