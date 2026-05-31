@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useLibraryStore } from "../state/library";
 import { useReaderStore } from "../state/reader";
-import { api, type Book } from "../lib/api";
+import { useJobsStore } from "../state/jobs";
+import { type Book } from "../lib/api";
 import { format, useT } from "../lib/i18n";
 import { BookActionModal } from "./BookActionModal";
 
@@ -22,6 +23,7 @@ export function Library({ onOpenSettings }: LibraryProps) {
   const toggleSelected = useLibraryStore((s) => s.toggleSelected);
   const clearSelected = useLibraryStore((s) => s.clearSelected);
   const deleteBooks = useLibraryStore((s) => s.deleteBooks);
+  const enqueueBooks = useJobsStore((s) => s.enqueueBooks);
   const openBook = useReaderStore((s) => s.open);
   const [actionBook, setActionBook] = useState<Book | null>(null);
 
@@ -47,11 +49,10 @@ export function Library({ onOpenSettings }: LibraryProps) {
   const onBatchGenerate = async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    if (!confirm(format(t("library.generateConfirmPlural"), { n: ids.length }))) return;
-    for (const id of ids) {
-      try { await api.startTtsJob(id, "whole_book", ""); }
-      catch (e) { console.error("batch generate", id, e); }
-    }
+    // Don't fire-and-forget — enqueue to the jobs panel so the user can
+    // tweak chapters per book before actually kicking off generation.
+    const picked: Book[] = books.filter((b) => ids.includes(b.id));
+    await enqueueBooks(picked);
     clearSelected();
     setSelectMode(false);
   };

@@ -43,12 +43,31 @@ interface Messages {
   "reader.contents": string;
   "reader.settings": string;
   "reader.play": string;
+  "reader.pause": string;
+  "reader.resume": string;
+  "reader.stop": string;
   "reader.busy": string;
   "reader.previous": string;
   "reader.next": string;
   "reader.toggleControls": string;
   "reader.ttsErrorTitle": string;
   "reader.ok": string;
+
+  // Jobs panel
+  "jobs.button": string;
+  "jobs.title": string;
+  "jobs.openPanel": string;
+  "jobs.empty": string;
+  "jobs.pending": string;
+  "jobs.active": string;
+  "jobs.done": string;
+  "jobs.startAll": string;
+  "jobs.startSelected": string;
+  "jobs.startWhole": string;
+  "jobs.selectAll": string;
+  "jobs.selectNone": string;
+  "jobs.chaptersSelected": string;
+  "jobs.loadingChapters": string;
 
   // Settings page
   "settings.title": string;
@@ -125,12 +144,30 @@ const ZH: Messages = {
   "reader.contents": "目录",
   "reader.settings": "⚙ 设置",
   "reader.play": "▶ 播放",
+  "reader.pause": "暂停",
+  "reader.resume": "继续",
+  "reader.stop": "停止",
   "reader.busy": "…",
   "reader.previous": "上一页",
   "reader.next": "下一页",
   "reader.toggleControls": "显示/隐藏控件",
   "reader.ttsErrorTitle": "音频生成失败",
   "reader.ok": "好",
+
+  "jobs.button": "▶ 任务 ({n})",
+  "jobs.title": "音频生成任务",
+  "jobs.openPanel": "打开任务面板",
+  "jobs.empty": "暂无任务。",
+  "jobs.pending": "待开始",
+  "jobs.active": "生成中",
+  "jobs.done": "已完成",
+  "jobs.startAll": "开始全部 ({n})",
+  "jobs.startSelected": "生成所选 {n} 章",
+  "jobs.startWhole": "生成整本书",
+  "jobs.selectAll": "全选",
+  "jobs.selectNone": "全不选",
+  "jobs.chaptersSelected": "已选 {sel} / {total} 章",
+  "jobs.loadingChapters": "正在加载目录…",
 
   "settings.title": "设置",
   "settings.back": "← 返回",
@@ -205,12 +242,30 @@ const EN: Messages = {
   "reader.contents": "Contents",
   "reader.settings": "⚙ Settings",
   "reader.play": "▶ Play",
+  "reader.pause": "Pause",
+  "reader.resume": "Resume",
+  "reader.stop": "Stop",
   "reader.busy": "…",
   "reader.previous": "previous page",
   "reader.next": "next page",
   "reader.toggleControls": "toggle controls",
   "reader.ttsErrorTitle": "TTS failed",
   "reader.ok": "OK",
+
+  "jobs.button": "▶ Tasks ({n})",
+  "jobs.title": "Audio generation tasks",
+  "jobs.openPanel": "Open tasks panel",
+  "jobs.empty": "No tasks.",
+  "jobs.pending": "Pending",
+  "jobs.active": "Running",
+  "jobs.done": "Completed",
+  "jobs.startAll": "Start all ({n})",
+  "jobs.startSelected": "Generate {n} chapters",
+  "jobs.startWhole": "Generate whole book",
+  "jobs.selectAll": "Select all",
+  "jobs.selectNone": "Select none",
+  "jobs.chaptersSelected": "{sel} / {total} chapters selected",
+  "jobs.loadingChapters": "Loading TOC…",
 
   "settings.title": "Settings",
   "settings.back": "← Back",

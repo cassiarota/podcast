@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Library } from "./views/Library";
 import { Reader } from "./views/Reader";
 import { Settings } from "./views/Settings";
-import { JobsBanner } from "./views/JobsBanner";
+import { JobsButton, JobsPanel } from "./views/JobsPanel";
 import { useLibraryStore } from "./state/library";
 import { useReaderStore } from "./state/reader";
 import { useSettingsStore } from "./state/settings";
@@ -36,7 +36,8 @@ export function App() {
 
   return (
     <div className="app" lang={settings.uiLanguage}>
-      <JobsBanner />
+      <JobsButton />
+      <JobsPanel />
       {settingsOpen ? (
         <Settings onClose={() => setSettingsOpen(false)} />
       ) : openBookId ? (

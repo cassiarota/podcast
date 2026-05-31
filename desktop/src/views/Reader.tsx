@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReaderStore } from "../state/reader";
 import { useSettingsStore } from "../state/settings";
+import { usePlayerStore } from "../state/player";
 import { useT } from "../lib/i18n";
 import { TOC } from "./TOC";
 
@@ -197,36 +198,58 @@ export function Reader({ bookId, onOpenSettings }: ReaderProps) {
 function PlayButton() {
   const t = useT();
   const page = useReaderStore((s) => s.currentPage);
-  const [busy, setBusy] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const status = usePlayerStore((s) => s.status);
+  const playerPageId = usePlayerStore((s) => s.pageId);
+  const error = usePlayerStore((s) => s.error);
+  const positionMs = usePlayerStore((s) => s.positionMs);
+  const durationMs = usePlayerStore((s) => s.durationMs);
+  const play = usePlayerStore((s) => s.play);
+  const pause = usePlayerStore((s) => s.pause);
+  const resume = usePlayerStore((s) => s.resume);
+  const stop = usePlayerStore((s) => s.stop);
+  const clearError = usePlayerStore((s) => s.clearError);
 
   if (!page) return null;
+  const isThisPage = playerPageId === page.id;
+  const showLoading = status === "loading" && isThisPage;
+  const showPlayingControls = (status === "playing" || status === "paused") && isThisPage;
+
   return (
-    <button
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          const { api } = await import("../lib/api");
-          const chunk = await api.playCachedOrGenerate(
-            page.book_id,
-            page.id,
-            "" // empty → backend reads saved TtsSettings.voice
-          );
-          const { convertFileSrc } = await import("@tauri-apps/api/core");
-          const url = convertFileSrc(chunk.path);
-          if (!audioRef.current) audioRef.current = new Audio();
-          audioRef.current.src = url;
-          await audioRef.current.play();
-        } catch (e) {
-          console.error("playback failed", e);
-          alert(`${t("reader.ttsErrorTitle")}: ${e}`);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {busy ? t("reader.busy") : t("reader.play")}
-    </button>
+    <>
+      {error && (
+        <div className="play-error" onClick={clearError} title={error}>
+          ⚠ {error.length > 60 ? error.slice(0, 60) + "…" : error}
+        </div>
+      )}
+      {showPlayingControls ? (
+        <div className="play-controls">
+          {status === "playing" ? (
+            <button onClick={pause}>⏸ {t("reader.pause")}</button>
+          ) : (
+            <button onClick={resume}>▶ {t("reader.resume")}</button>
+          )}
+          <button onClick={stop}>⏹ {t("reader.stop")}</button>
+          <span className="play-time">
+            {fmtTime(positionMs)} / {fmtTime(durationMs)}
+          </span>
+        </div>
+      ) : (
+        <button
+          disabled={showLoading}
+          onClick={() => play(page.book_id, page.id)}
+        >
+          {showLoading ? t("reader.busy") : t("reader.play")}
+        </button>
+      )}
+    </>
+  );
+}
+
+function fmtTime(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
   );
 }

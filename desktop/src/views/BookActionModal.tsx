@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLibraryStore } from "../state/library";
+import { useJobsStore } from "../state/jobs";
 import { api, type Book, type Section } from "../lib/api";
 import { format, useT } from "../lib/i18n";
 import { useSettingsStore } from "../state/settings";
@@ -14,6 +15,7 @@ export function BookActionModal({ book, onClose }: BookActionModalProps) {
   const t = useT();
   const lang = useSettingsStore((s) => s.settings.uiLanguage);
   const deleteBook = useLibraryStore((s) => s.deleteBook);
+  const enqueueBooks = useJobsStore((s) => s.enqueueBooks);
   const [sections, setSections] = useState<Section[] | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -23,11 +25,11 @@ export function BookActionModal({ book, onClose }: BookActionModalProps) {
   }, [book.id]);
 
   const onGenerateWhole = async () => {
-    if (!confirm(format(t("library.generateConfirm"), { title: book.title }))) return;
     setBusy(true);
     try {
-      await api.startTtsJob(book.id, "whole_book", "");
-      alert(format(t("library.jobStarted"), { title: book.title }));
+      // Enqueue into the jobs panel so the user can tweak chapters before
+      // actually kicking generation off (matches the multi-book flow).
+      await enqueueBooks([book]);
       onClose();
     } catch (e) {
       alert(`${t("reader.ttsErrorTitle")}: ${e}`);
@@ -40,7 +42,6 @@ export function BookActionModal({ book, onClose }: BookActionModalProps) {
     setBusy(true);
     try {
       await api.startTtsJob(book.id, `section:${s.id}`, "");
-      alert(format(t("library.jobStarted"), { title: s.title || `Section ${s.ord + 1}` }));
     } catch (e) {
       alert(`${t("reader.ttsErrorTitle")}: ${e}`);
     } finally {

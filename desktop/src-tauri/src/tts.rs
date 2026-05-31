@@ -114,7 +114,7 @@ pub async fn start_tts_job(
 
     tokio::spawn(async move {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(90))
+            .timeout(Duration::from_secs(300))
             .build()
             .unwrap();
         let mut done = 0usize;
@@ -316,7 +316,7 @@ pub async fn play_cached_or_generate(
     // Cache miss — generate now.
     state.sidecar.ensure_running().await.map_err(|e| e.to_string())?;
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(300))
         .build()
         .unwrap();
     let req = serde_json::json!({

@@ -240,3 +240,111 @@ body {
 .jobs-row-fill { height: 100%; background: #2a6f4a; transition: width 0.3s; }
 .jobs-row-done .jobs-row-fill { background: #4a9468; }
 .jobs-row-failed .jobs-row-fill { background: #9c3434; }
+
+/* Player extras */
+.play-controls {
+  display: flex; gap: 6px; align-items: center;
+  background: #1c1c1c; padding: 4px 8px; border-radius: 6px;
+}
+.play-controls button {
+  background: #2a2a2a; color: #eee; border: 1px solid #3a3a3a;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+.play-controls button:hover { background: #333; }
+.play-time {
+  color: #999; font-size: 12px; font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+}
+.play-error {
+  background: #4a1f1f; color: #f7c5c5; padding: 4px 10px;
+  border-radius: 4px; font-size: 12px; cursor: pointer;
+  max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Jobs floating button + panel */
+.jobs-button {
+  position: fixed; top: 14px; right: 18px; z-index: 7;
+  background: #2a6f4a; color: #fff; border: none;
+  padding: 8px 14px; border-radius: 18px;
+  font-size: 13px; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+}
+.jobs-button:hover { background: #38805b; }
+
+.jobs-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; justify-content: flex-end; z-index: 9;
+}
+.jobs-panel {
+  width: min(520px, 100vw); height: 100vh;
+  background: #1f1f1f; color: #eee; overflow-y: auto;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column;
+}
+.jobs-panel-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px; border-bottom: 1px solid #2a2a2a;
+  background: #181818; position: sticky; top: 0; z-index: 1;
+}
+.jobs-panel-header h2 { margin: 0; font-size: 17px; }
+.jobs-panel-header button {
+  background: #2a2a2a; color: #eee; border: 1px solid #3a3a3a;
+  padding: 6px 12px; border-radius: 4px; cursor: pointer;
+}
+.jobs-empty { padding: 32px; color: #888; text-align: center; }
+.jobs-section { padding: 12px 18px; border-bottom: 1px solid #2a2a2a; }
+.jobs-section h3 { margin: 4px 0 12px; font-size: 14px; color: #ccc; }
+.jobs-section-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+}
+.jobs-section-header h3 { flex: 1; margin: 0; }
+.jobs-section-header button.primary {
+  background: #2a6f4a; color: #fff; border: none;
+  padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+
+.jobs-pending-row {
+  padding: 12px; background: #262626; border-radius: 6px;
+  margin-bottom: 10px;
+}
+.jobs-pending-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.jobs-pending-title { flex: 1; min-width: 140px; font-size: 14px; }
+.jobs-pending-meta { color: #999; font-size: 12px; }
+.jobs-pending-head button {
+  background: #2a2a2a; color: #eee; border: 1px solid #3a3a3a;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.jobs-pending-head button.primary { background: #2a6f4a; border-color: #2a6f4a; }
+.jobs-pending-head button:disabled { opacity: 0.5; cursor: not-allowed; }
+.jobs-chapter-toolbar { display: flex; gap: 8px; margin: 10px 0 6px; }
+.jobs-chapter-toolbar button.ghost {
+  background: transparent; color: #aaa; border: 1px solid #444;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.jobs-chapter-list {
+  max-height: 240px; overflow-y: auto;
+  border-top: 1px solid #333; padding-top: 6px;
+}
+.jobs-chapter-row {
+  display: flex; gap: 8px; align-items: center;
+  padding: 4px 2px; font-size: 13px; color: #ddd;
+}
+.jobs-chapter-row input { width: 16px; height: 16px; }
+
+.jobs-active-row { padding: 8px 0; }
+.jobs-active-label {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 13px; margin-bottom: 4px;
+}
+.jobs-active-pct { color: #9ddfb6; font-variant-numeric: tabular-nums; }
+.jobs-active-bar {
+  height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;
+}
+.jobs-active-fill {
+  height: 100%; background: #2a6f4a; transition: width 0.3s;
+}
+
+.jobs-done-row { padding: 6px 0; font-size: 13px; color: #9ddfb6; }
+.jobs-done-failed { color: #d97a7a; }
