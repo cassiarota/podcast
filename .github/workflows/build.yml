@@ -86,7 +86,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "huggingface_hub[cli]"
           mkdir -p models
-          huggingface-cli download hexgrad/Kokoro-82M --local-dir models/Kokoro-82M
+          # huggingface_hub 1.x renamed `huggingface-cli` to `hf`.
+          hf download hexgrad/Kokoro-82M --local-dir models/Kokoro-82M
 
       - name: Verify model exists
         shell: bash
