@@ -82,7 +82,7 @@ function ensureAudio(set: (p: Partial<PlayerState>) => void): HTMLAudioElement {
         const bookId = useReaderStore.getState().openBookId;
         if (next && bookId) {
           // Re-enter play() to trigger fetch/cache + audio.play() chain.
-          await get().play(bookId, next.id);
+          await usePlayerStore.getState().play(bookId, next.id);
         }
       });
     } catch (e) {
