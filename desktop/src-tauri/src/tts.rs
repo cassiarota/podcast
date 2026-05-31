@@ -135,14 +135,21 @@ pub async fn start_tts_job(
             }
 
             let text_hash = hex::encode(Sha256::digest(text.as_bytes()));
-            let key = cache::cache_key(&text_hash, &engine_task, &voice_for_task, &language_for_task, speed_for_task);
+            // Per-chunk language auto-detect (same logic as the realtime
+            // path) — a multi-language book reads correctly even when
+            // some chapters are in a different language than the user's
+            // saved default.
+            let mut voice_eff = voice_for_task.clone();
+            let mut lang_eff = language_for_task.clone();
+            detect_and_override_voice(text, &mut voice_eff, &mut lang_eff, &engine_task);
+            let key = cache::cache_key(&text_hash, &engine_task, &voice_eff, &lang_eff, speed_for_task);
             let path = cache::cache_path(&audio_dir, &key);
             if !path.exists() {
                 let req = serde_json::json!({
                     "text": text,
                     "engine": engine_task,
-                    "voice": voice_for_task,
-                    "language": language_for_task,
+                    "voice": voice_eff,
+                    "language": lang_eff,
                     "speed": speed_for_task,
                     "cache_key": key,
                 });
@@ -166,7 +173,7 @@ pub async fn start_tts_job(
                                     body.path,
                                     body.duration_ms,
                                     engine_task,
-                                    voice_for_task,
+                                    voice_eff,
                                     text_hash,
                                     now_secs()
                                 ],
@@ -266,12 +273,12 @@ pub async fn play_cached_or_generate(
     let tts_settings = crate::reader::get_tts_settings(state.clone())
         .unwrap_or_else(|_| crate::reader::TtsSettings::default());
     let engine = tts_settings.engine.clone();
-    let voice = if voice_preset.is_empty() {
+    let mut voice = if voice_preset.is_empty() {
         tts_settings.voice.clone()
     } else {
         voice_preset.clone()
     };
-    let language = tts_settings.language.clone();
+    let mut language = tts_settings.language.clone();
     let speed = tts_settings.speed as f32;
 
     // Look up the page's text first.
@@ -284,6 +291,14 @@ pub async fn play_cached_or_generate(
         )
         .map_err(|e| format!("page not found: {e}"))?
     };
+
+    // Auto-detect the page language from its content and rewrite the voice +
+    // language pair if needed. This means a Chinese book always speaks
+    // through a Chinese voice (and Chinese phonemizer), even if the saved
+    // TtsSettings still hold the af_heart / en defaults — without this the
+    // user hears espeak's English fallback verbalize every CJK codepoint
+    // as "Chinese letter".
+    detect_and_override_voice(&text, &mut voice, &mut language, &engine);
 
     let engine_local = engine.clone();
     let key = cache::cache_key(&text_hash, &engine_local, &voice, &language, speed);
@@ -531,5 +546,185 @@ mod parse_error_tests {
     fn non_json_falls_through_to_raw() {
         let r = parse_sidecar_error("plain text crash");
         assert_eq!(r, "plain text crash");
+    }
+}
+
+/// Default Kokoro voice IDs by language-prefix character. Used when the
+/// auto-detector wants to switch to a language but the user-saved voice
+/// is in the wrong language (e.g. user has `af_heart` saved but is
+/// reading a Chinese book).
+fn default_kokoro_voice(prefix: char) -> &'static str {
+    match prefix {
+        'z' => "zf_xiaoxiao", // Mandarin female, standard
+        'j' => "jf_alpha",     // Japanese female
+        'b' => "bf_alice",     // British English
+        _ => "af_heart",       // American English fallback
+    }
+}
+
+fn lang_to_voice_prefix(lang: &str) -> Option<char> {
+    match lang {
+        "zh" => Some('z'),
+        "ja" => Some('j'),
+        "en-GB" => Some('b'),
+        "en" | "en-US" => Some('a'),
+        _ => None,
+    }
+}
+
+fn voice_prefix(voice: &str) -> Option<char> {
+    let chars: Vec<char> = voice.chars().collect();
+    if chars.len() >= 3 && (chars[1] == 'f' || chars[1] == 'm') && chars[2] == '_' {
+        Some(chars[0])
+    } else {
+        None
+    }
+}
+
+/// Returns true if at least 30% of the letter-bearing characters in `text`
+/// are CJK ideographs.
+fn is_predominantly_chinese(text: &str) -> bool {
+    let mut total = 0usize;
+    let mut cjk = 0usize;
+    for ch in text.chars() {
+        if ch.is_alphabetic() {
+            total += 1;
+            let cp = ch as u32;
+            // CJK Unified Ideographs + Extension A — covers all modern Chinese.
+            if (0x4E00..=0x9FFF).contains(&cp) || (0x3400..=0x4DBF).contains(&cp) {
+                cjk += 1;
+            }
+        }
+    }
+    // Require a minimum of 8 CJK characters to avoid mis-flagging a stray
+    // Chinese name embedded in an otherwise-English paragraph.
+    total >= 1 && cjk >= 8 && cjk * 10 >= total * 3
+}
+
+/// Mutates `voice` + `language` to match the page's actual language when the
+/// user's saved choice would phonemize wrong (e.g. American voice on a
+/// Chinese book).
+fn detect_and_override_voice(text: &str, voice: &mut String, language: &mut String, engine: &str) {
+    // Only Kokoro speaks multiple languages right now; Qwen / stub don't have
+    // per-language voices so leave them alone.
+    if engine != "kokoro" {
+        return;
+    }
+    let need_prefix = if is_predominantly_chinese(text) {
+        Some('z')
+    } else {
+        // Could extend: Japanese / Korean / ... detectors. For now we only
+        // override when the page is clearly Chinese.
+        None
+    };
+    let Some(needed) = need_prefix else { return; };
+    let current = voice_prefix(voice);
+    if current == Some(needed) {
+        // Voice already correct; just make sure language matches so the cache
+        // key reflects what the engine will actually do.
+        if let Some(lang) = match needed { 'z' => Some("zh"), 'j' => Some("ja"), _ => None } {
+            *language = lang.to_string();
+        }
+        return;
+    }
+    *voice = default_kokoro_voice(needed).to_string();
+    if let Some(lang) = match needed { 'z' => Some("zh"), 'j' => Some("ja"), _ => None } {
+        *language = lang.to_string();
+    }
+    let _ = lang_to_voice_prefix; // referenced for symmetry / future use
+}
+
+#[cfg(test)]
+mod voice_detection_tests {
+    use super::*;
+
+    #[test]
+    fn predominantly_chinese_detects_pure_chinese() {
+        let text = "李火旺举起手中的捣药杆，百无聊赖的一下一下砸在捣药罐里。";
+        assert!(is_predominantly_chinese(text));
+    }
+
+    #[test]
+    fn predominantly_chinese_rejects_pure_english() {
+        let text = "The lighthouse keeper had counted the waves for thirty years.";
+        assert!(!is_predominantly_chinese(text));
+    }
+
+    #[test]
+    fn predominantly_chinese_rejects_one_chinese_name_in_english() {
+        let text = "The character 李 means plum, but the rest of this paragraph is English.";
+        assert!(!is_predominantly_chinese(text));
+    }
+
+    #[test]
+    fn predominantly_chinese_accepts_mixed_with_majority_cjk() {
+        let text = "他说：「OK, 我马上去做这件事情，别等我。」然后他就走了出去。";
+        assert!(is_predominantly_chinese(text));
+    }
+
+    #[test]
+    fn voice_prefix_recognizes_kokoro_pattern() {
+        assert_eq!(voice_prefix("af_heart"), Some('a'));
+        assert_eq!(voice_prefix("zf_xiaoxiao"), Some('z'));
+        assert_eq!(voice_prefix("zm_yunxi"), Some('z'));
+        assert_eq!(voice_prefix("bf_alice"), Some('b'));
+        assert_eq!(voice_prefix("default"), None);
+        assert_eq!(voice_prefix(""), None);
+    }
+
+    #[test]
+    fn detect_overrides_english_voice_on_chinese_text() {
+        let mut voice = "af_heart".to_string();
+        let mut language = "en".to_string();
+        detect_and_override_voice(
+            "李火旺举起手中的捣药杆，百无聊赖的一下一下砸在捣药罐里。",
+            &mut voice,
+            &mut language,
+            "kokoro",
+        );
+        assert_eq!(voice, "zf_xiaoxiao");
+        assert_eq!(language, "zh");
+    }
+
+    #[test]
+    fn detect_leaves_chinese_voice_alone_on_chinese_text() {
+        let mut voice = "zm_yunxi".to_string();
+        let mut language = "en".to_string(); // stale
+        detect_and_override_voice(
+            "李火旺举起手中的捣药杆，百无聊赖的一下一下砸在捣药罐里。",
+            &mut voice,
+            &mut language,
+            "kokoro",
+        );
+        assert_eq!(voice, "zm_yunxi"); // unchanged
+        assert_eq!(language, "zh");    // synced
+    }
+
+    #[test]
+    fn detect_does_not_touch_english_text() {
+        let mut voice = "af_heart".to_string();
+        let mut language = "en".to_string();
+        detect_and_override_voice(
+            "The lighthouse keeper had counted the waves for thirty years.",
+            &mut voice,
+            &mut language,
+            "kokoro",
+        );
+        assert_eq!(voice, "af_heart");
+        assert_eq!(language, "en");
+    }
+
+    #[test]
+    fn detect_is_noop_for_qwen() {
+        let mut voice = "default".to_string();
+        let mut language = "en".to_string();
+        detect_and_override_voice(
+            "李火旺举起手中的捣药杆，百无聊赖的一下一下砸在捣药罐里。",
+            &mut voice,
+            &mut language,
+            "qwen",
+        );
+        assert_eq!(voice, "default");
+        assert_eq!(language, "en");
     }
 }
