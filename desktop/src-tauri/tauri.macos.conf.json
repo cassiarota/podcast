@@ -1,6 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "resources": ["../../models/Kokoro-82M/**/*"]
+    "resources": [
+      "../../models/Kokoro-82M/**/*",
+      "../sidecar/main.py",
+      "../sidecar/engine_base.py",
+      "../sidecar/engine_stub.py",
+      "../sidecar/engine_kokoro.py",
+      "../sidecar/engine_qwen.py",
+      "../sidecar/pyproject.toml"
+    ]
   }
 }

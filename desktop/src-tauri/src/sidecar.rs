@@ -112,7 +112,7 @@ impl SidecarState {
         if !main_py.exists() {
             return Err(anyhow!("sidecar entrypoint missing: {main_py:?}"));
         }
-        let python = which_python(&sidecar_dir)?;
+        let python = which_python(&sidecar_dir, &self.data_dir)?;
         tracing::info!("starting Python TTS sidecar: {python:?} {main_py:?}");
 
         let port = self.port();
@@ -195,16 +195,35 @@ impl Drop for SidecarState {
     }
 }
 
-/// Pick a Python interpreter for the sidecar. Prefers a project-local venv,
-/// then falls back to `python3` / `python` on PATH.
-fn which_python(sidecar_dir: &std::path::Path) -> Result<PathBuf> {
-    let venv_python = if cfg!(target_os = "windows") {
-        sidecar_dir.join(".venv").join("Scripts").join("python.exe")
+/// Pick a Python interpreter for the sidecar.
+///
+/// Lookup order:
+///   1. The dev venv next to the sidecar dir (`<sidecar>/.venv/bin/python`) —
+///      this is what `scripts/macos-setup.sh` creates.
+///   2. A per-user venv at `<app_data_dir>/sidecar-venv/bin/python` —
+///      this is what users of the bundled .dmg / .app would set up.
+///   3. `python3.12` / `python3` / `python` on PATH (last resort — engine load
+///      will fail at runtime if `kokoro` isn't available, which surfaces a
+///      `kokoro_not_installed` error in the UI).
+fn which_python(sidecar_dir: &std::path::Path, data_dir: &std::path::Path) -> Result<PathBuf> {
+    let bin_subdir = if cfg!(target_os = "windows") {
+        "Scripts"
     } else {
-        sidecar_dir.join(".venv").join("bin").join("python")
+        "bin"
     };
-    if venv_python.exists() {
-        return Ok(venv_python);
+    let exe = if cfg!(target_os = "windows") {
+        "python.exe"
+    } else {
+        "python"
+    };
+
+    let dev_venv = sidecar_dir.join(".venv").join(bin_subdir).join(exe);
+    if dev_venv.exists() {
+        return Ok(dev_venv);
+    }
+    let user_venv = data_dir.join("sidecar-venv").join(bin_subdir).join(exe);
+    if user_venv.exists() {
+        return Ok(user_venv);
     }
     for candidate in ["python3.12", "python3", "python"] {
         if let Ok(out) = Command::new(candidate).arg("--version").output() {
@@ -214,6 +233,7 @@ fn which_python(sidecar_dir: &std::path::Path) -> Result<PathBuf> {
         }
     }
     Err(anyhow!(
-        "no Python interpreter found; install Python 3.12+ or create a venv at {sidecar_dir:?}/.venv"
+        "no Python interpreter found; install Python 3.12+ or create a venv at {sidecar_dir:?}/.venv \
+         (or {data_dir:?}/sidecar-venv for bundled installs)"
     ))
 }

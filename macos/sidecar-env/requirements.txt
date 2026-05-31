@@ -1,10 +1,27 @@
-# Kokoro TTS sidecar deps (macOS)
+# Kokoro TTS sidecar deps for macOS (CPU; works on Apple Silicon + Intel).
+#
+# DO NOT add CUDA torch here — that's the Windows path. The default torch
+# wheel on macOS uses MPS (Metal) on Apple Silicon and CPU on Intel.
+
+# FastAPI service framework
 fastapi>=0.115
 uvicorn>=0.32
 pydantic>=2.9
+
+# Audio output
 numpy>=1.26
 soundfile>=0.12
 
-# Kokoro Python package — installs only if available on the platform.
-# The sidecar falls back to a stub engine if this import fails.
+# Kokoro core
 kokoro>=0.9
+
+# misaki = Kokoro's text → phoneme frontend.
+# kokoro pulls misaki[en] automatically. Add language extras you want to use:
+misaki[zh]>=0.7   # Chinese (Mandarin) — adds jieba + pypinyin + cn2an
+misaki[ja]>=0.7   # Japanese — adds pyopenjtalk
+# misaki[ko]      # Korean — uncomment if you want Korean
+
+# Note: torch is pulled in transitively by kokoro. If you want to pin a
+# specific version, add it here AFTER kokoro to avoid the resolver picking
+# a CUDA wheel by accident:
+#   torch>=2.4,<3.0

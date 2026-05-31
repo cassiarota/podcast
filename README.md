@@ -31,27 +31,18 @@ demo.txt    用于 demo 的示例文本
 
 ### macOS
 
-```sh
-# 1. 安装依赖（一次性）
-brew install node pnpm python@3.12 rustup git-lfs
-rustup-init -y
-git lfs install
+**一键安装**：跑仓库根的脚本。
 
-# 2. 拉取仓库与模型权重
+```sh
 git clone https://github.com/cassiarota/podcast.git
 cd podcast
-git lfs pull
-
-# 3. 准备 Python TTS 子进程环境（Kokoro）
-bash macos/sidecar-env/activate.sh
-
-# 4. 启动桌面应用
-cd desktop
-pnpm install
-pnpm tauri dev
+bash scripts/macos-setup.sh   # 准备一切：LFS / Rust / Node / pnpm / Python venv / Kokoro
+bash scripts/macos-dev.sh     # 启动开发模式
+# 或者打包安装包：
+bash scripts/macos-build.sh   # 产出 .dmg（约 400 MB，含 Kokoro 模型）
 ```
 
-详细步骤与验证清单见 [`macos/README.md`](macos/README.md)。
+详细步骤、验证清单与常见问题见 [`macos/README.md`](macos/README.md)。
 
 ### Windows
 
