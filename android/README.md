@@ -1,27 +1,34 @@
-# Android — Phase 2 (Not Yet Implemented)
+# Android（Phase 2，暂未实现）
 
-Per `docs/cloud-agent-handoff.md` and `docs/reader-app-plan.md`, Android is Phase 2. **Do not start Android first.** No code lives here yet; this directory exists only to reserve the structure and codify the plan.
+根据 `docs/cloud-agent-handoff.md` 与 `docs/reader-app-plan.md`，Android 端作为 Phase 2 实施，**不能先做**。当前目录只保留位置和规划文档，没有代码。
 
-## Target stack
+## 目标技术栈
 
-- Kotlin + Jetpack Compose for the UI.
-- ONNX Runtime Mobile (int8 quantized) for Kokoro TTS, **not** the desktop Python sidecar.
-- SQLite via Room or AndroidX SQLite, mirroring the schema in `desktop/src-tauri/src/db.rs`.
-- Bundled Kokoro assets from `../models/Kokoro-82M/`. The float model is too large for mobile; the Phase 2 deliverable converts it to a quantized ONNX export.
+- **UI 框架**：Kotlin + Jetpack Compose
+- **TTS 引擎**：ONNX Runtime Mobile + Kokoro 量化（int8），**不**使用桌面端的 Python 子进程方案
+- **存储**：通过 Room 或 AndroidX SQLite，复用 `desktop/src-tauri/src/db.rs` 的 schema
+- **模型资源**：源头来自 `../models/Kokoro-82M/`，但需要先转成 ONNX 量化版本（PyTorch 浮点权重对移动端太大）
 
-## What to preserve from the desktop work
+## 桌面端可复用的部分
 
-- The SQLite schema (books / sections / pages / reading_positions / settings / tts_jobs / audio_chunks).
-- The cache-key formula: `sha256(text_hash | engine | voice | language | speed)`.
-- The lazy-load contract: no TTS model loaded at app launch — only on first generate/play request.
-- The platform-agnostic UX rules: bookshelf-first, tap regions, auto-hiding controls, progress %, 10 background presets including eye-protect green.
+- **SQLite schema**：books / sections / pages / reading_positions / settings / tts_jobs / audio_chunks
+- **缓存键算法**：`sha256(文本哈希 | 引擎 | 音色 | 语言 | 语速)`
+- **懒加载约定**：应用启动**不**加载模型，第一次播放才加载
+- **UX 通则**：书架首页、左右翻页、中部唤起控件、自动隐藏底栏、阅读进度百分比、10 种背景预设（含护眼绿）
 
-## What changes on Android
+## Android 与桌面的差异
 
-- No Python sidecar — the engine runs in-process via ONNX Runtime Mobile.
-- No filesystem dialog — use the Storage Access Framework for TXT/EPUB import.
-- Page tap regions must respect Material insets and gesture navigation.
+- 没有 Python 子进程 —— 引擎在主进程内通过 ONNX Runtime Mobile 跑
+- 没有原生文件对话框 —— 改用 Storage Access Framework 导入 TXT/EPUB
+- 翻页区域要兼容 Material 安全区和系统手势
 
-## When to start
+## 启动时机
 
-Begin Phase 2 only after the desktop reader (M1–M2), TTS infrastructure (M3), Kokoro engine (M4), and Kokoro-on-macOS verification are stable. See the verification checklist in `../macos/README.md`.
+只有当桌面端的下列里程碑全部稳定后再启动 Phase 2：
+
+- M1：阅读器基础壳
+- M2：阅读器完成态（EPUB / TOC / 主题 / 书架素材）
+- M3：TTS 子进程基础设施
+- M4：macOS Kokoro 路径
+
+详见 `../macos/README.md` 的验证清单。

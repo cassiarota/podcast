@@ -1,132 +1,132 @@
-# Cloud Agent Handoff
+# 远程开发交接说明
 
-## Purpose
+## 目的
 
-This repo is prepared for remote implementation. Do not treat it as an existing app. It is a handoff package containing plans and model assets.
+本仓库准备给远程实施者使用。**不要**当成既有应用对待 —— 它是一份包含方案与模型资产的交接包。
 
-## Start Here
+## 从这里开始
 
-1. Read `README.md`.
-2. Read `docs/reader-app-plan.md`.
-3. Confirm Git LFS pulled `models/Kokoro-82M/kokoro-v1_0.pth`.
-4. Scaffold the app only after understanding the architecture and platform split.
+1. 阅读 `README.md`。
+2. 阅读 `docs/reader-app-plan.md`。
+3. 确认 Git LFS 已拉取 `models/Kokoro-82M/kokoro-v1_0.pth`。
+4. 理解架构与平台拆分**之后**再脚手架。
 
-## Environment Expectations
+## 环境预期
 
-Desktop implementation:
+桌面端实施：
 
-- Node.js current LTS or project-selected stable version.
-- Rust stable toolchain.
-- Tauri v2 CLI and prerequisites.
-- Python 3.12 environment for TTS sidecars.
-- SQLite tooling or Rust SQLite crate.
+- Node.js 当前 LTS 或项目选定的稳定版
+- Rust 稳定工具链
+- Tauri v2 CLI 与前置依赖
+- Python 3.12 环境用于 TTS 子进程
+- SQLite 工具或 Rust SQLite crate
 
-Windows TTS:
+Windows TTS：
 
-- NVIDIA CUDA-capable machine.
-- External model paths:
+- NVIDIA CUDA 兼容机器
+- 外部模型路径：
   - `D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice`
   - `D:\models\Qwen3-TTS-Tokenizer-12Hz`
-- `qwen-tts` Python package installed in the sidecar environment.
+- 子进程环境安装 `qwen-tts` Python 包
 
-macOS TTS:
+macOS TTS：
 
-- Use bundled Kokoro assets from `models/Kokoro-82M`.
-- Do not require Qwen on macOS.
+- 使用 `models/Kokoro-82M` 内绑定的 Kokoro 资产
+- macOS 端不需要 Qwen
 
-Android Phase 2:
+Android Phase 2：
 
-- Do not start Android first.
-- Keep the data model and UI concepts portable.
-- Plan mobile Kokoro separately with a mobile-appropriate runtime.
+- **不要**先做 Android
+- 保持数据模型与 UI 概念可移植
+- 单独规划移动 Kokoro 与匹配的移动运行时
 
-## Development Order
+## 开发顺序
 
-### Milestone 1: Reader Shell
+### Milestone 1：阅读器壳
 
-- Create Tauri v2 + React + TypeScript + Vite scaffold.
-- Add app navigation between library and reader.
-- Add SQLite setup and migrations.
-- Implement TXT import.
-- Render bookshelf screen with placeholder/generated shelf asset.
-- Render book entries as shelf items with titles.
-- Implement reader pagination and reading position persistence.
-- Implement left/right/center tap regions.
-- Implement auto-hiding bottom controls.
-- Implement reading progress percentage.
+- 创建 Tauri v2 + React + TypeScript + Vite 脚手架
+- 添加 library ↔ reader 的导航
+- 添加 SQLite 设置与迁移
+- 实现 TXT 导入
+- 渲染书架页（可用占位 / 生成的书架素材）
+- 书项以"书脊 + 标题"形态呈现
+- 实现阅读分页与位置持久化
+- 实现左 / 右 / 中 三块轻触区
+- 实现底部控件自动隐藏
+- 实现阅读进度百分比
 
-Do not implement TTS in this milestone.
+本里程碑**不要**实现 TTS。
 
-### Milestone 2: Reader Completeness
+### Milestone 2：阅读完成态
 
-- Add EPUB import.
-- Add TOC/content panel.
-- Add font size presets.
-- Add 10 background presets, including eye-protect green.
-- Add brightness control.
-- Add generated bookshelf asset and polish shelf layout.
+- 添加 EPUB 导入
+- 添加 TOC / 目录面板
+- 添加字号预设
+- 添加 10 种背景预设（含护眼绿）
+- 添加亮度控制
+- 生成书架美术 + 打磨书架排版
 
-### Milestone 3: TTS Infrastructure
+### Milestone 3：TTS 基础设施
 
-- Add audio cache schema.
-- Add cache directory management in app data.
-- Add Tauri-managed Python sidecar lifecycle.
-- Implement `/healthz` and readiness checks.
-- Verify the app can start and stop the sidecar without loading a model.
-- Add worker idle timeout.
+- 添加音频缓存 schema
+- app 数据目录下的缓存目录管理
+- Tauri 管理的 Python 子进程生命周期
+- 实现 `/healthz` 与就绪检查
+- 验证应用可以拉起 / 停止子进程而**不**加载任何模型
+- 添加 worker 空闲超时
 
-### Milestone 4: Kokoro Path
+### Milestone 4：Kokoro 路径
 
-- Implement Kokoro TTS using bundled `models/Kokoro-82M`.
-- Generate WAV chunks.
-- Store chunk metadata in SQLite.
-- Play cached WAV chunks from the reader.
-- Verify realtime current-page playback writes permanent cache entries.
+- 用 `models/Kokoro-82M` 绑定资源实现 Kokoro TTS
+- 生成 WAV 块
+- 块元数据落 SQLite
+- 阅读器从缓存播放 WAV 块
+- 验证实时当前页播放会写入**永久缓存**
 
-### Milestone 5: Qwen Path
+### Milestone 5：Qwen 路径
 
-- Implement Windows Qwen engine.
-- Validate CUDA before generation.
-- Validate external Qwen model paths.
-- Generate WAV chunks with selected basic voice preset.
-- Surface clear errors for missing CUDA/model paths.
+- 实现 Windows Qwen 引擎
+- 生成前校验 CUDA
+- 校验外部 Qwen 模型路径
+- 用选定的基础音色生成 WAV 块
+- 显式上报 CUDA / 模型路径缺失错误
 
-### Milestone 6: Offline Jobs
+### Milestone 6：离线任务
 
-- Add whole-book and selected-section generation.
-- Add progress UI.
-- Add cancel behavior.
-- Preserve completed chunks after cancel or failure.
-- Reuse cached chunks instead of regenerating.
+- 添加全书与选定章节生成
+- 添加进度 UI
+- 添加取消行为
+- 取消或失败后保留已完成块
+- 复用已缓存块，**不**重新生成
 
-### Milestone 7: Packaging
+### Milestone 7：打包
 
-- Build Windows desktop package without bundling Qwen.
-- Build macOS desktop package with Kokoro resources.
-- Verify app data, SQLite, and cached audio survive restart.
-- Document build commands and platform prerequisites.
+- 不绑定 Qwen 的情况下构建 Windows 桌面包
+- 绑定 Kokoro 资源构建 macOS 桌面包
+- 验证 app 数据、SQLite、缓存音频在重启后仍存活
+- 文档化构建命令与平台前置依赖
 
-## What Not To Do First
+## 不能先做的事
 
-- Do not implement Android before desktop reader basics work.
-- Do not load TTS models at app startup.
-- Do not copy Qwen weights into the repo.
-- Do not make a landing page.
-- Do not build TTS before import, pagination, and reading state are stable.
-- Do not use temporary-only realtime audio; realtime chunks must enter the permanent cache.
+- Android **不**能先于桌面端阅读基础。
+- **不**能在应用启动时加载 TTS 模型。
+- **不**能把 Qwen 权重塞进仓库。
+- **不**能做营销首页。
+- **不**能在导入 / 分页 / 阅读状态稳定**之前**做 TTS。
+- **不**能让实时音频只在临时位置；实时块必须进入永久缓存。
 
-## Verification Checklist
+## 验收清单
 
-Before reporting a milestone complete:
+里程碑视为完成前必须确认：
 
-- Run the relevant unit/integration tests.
-- Run the app locally for the target platform when possible.
-- Confirm no model loads on normal app startup.
-- Confirm imported books persist after restart.
-- Confirm generated audio chunks are indexed and replayable.
-- Confirm platform-specific model paths are documented.
-- Confirm large model files are handled by Git LFS.
+- 跑了相关单元 / 集成测试
+- 在可执行的目标平台本地跑过应用
+- 应用正常启动**不**加载模型
+- 已导入的书在重启后仍存在
+- 已生成的音频块被索引并可重放
+- 各平台模型路径已文档化
+- 大文件模型走 Git LFS
 
-## Handoff Notes
+## 交接备注
 
-The first useful pull request from the cloud agent should contain only the app scaffold, storage foundation, TXT import, bookshelf view, and reader view. Keeping TTS out of the first PR will make the core reader easier to verify before model complexity enters the project.
+远程实施者的**首个有用 PR** 应当只包含：应用脚手架、存储基础、TXT 导入、书架页、阅读页。把 TTS 留到第二个 PR 能让核心阅读流程更易验证，再让模型复杂度入场。

@@ -1,42 +1,18 @@
-# Windows Platform Overlay
+# Windows 构建与验证（英文版索引）
 
-This directory holds Windows-only configuration and assets for the Tauri app. The actual app code lives in `../desktop/`.
+中文安装详细步骤见 [`INSTALL_zh-CN.md`](INSTALL_zh-CN.md)（推荐）。
 
-## Build prerequisites
+本目录放置 Windows 平台专属的配置、图标、安装包脚本、Python 环境清单。应用本体在 `../desktop/`。
 
-- Windows 10/11 x64
-- NVIDIA GPU with current CUDA drivers (Qwen TTS requires CUDA — no CPU fallback in v1)
-- Visual Studio 2022 Build Tools with the "Desktop development with C++" workload
-- WebView2 runtime (preinstalled on Windows 11)
-- Rust stable: `rustup default stable`
-- Node.js 20+ and pnpm 10+
-- Python 3.12
+## 关键路径与约定
 
-## Required external model layout
+- Qwen 模型**不打包**入仓库，需手动放置：
+  - `D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice`
+  - `D:\models\Qwen3-TTS-Tokenizer-12Hz`
+- Python 子进程环境位于 `..\desktop\sidecar\.venv`（venv 路径由 Rust `sidecar.rs::which_python` 查找）。
+- 应用通过 `%APPDATA%\com.podcast.reader\` 存放 SQLite 和音频缓存。
 
-Qwen weights are **not** included in the installer. Place them at these exact paths before launching the app:
-
-```
-D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice
-D:\models\Qwen3-TTS-Tokenizer-12Hz
-```
-
-If the model directories are missing the app surfaces `model_path_missing` with the offending paths. If CUDA is unavailable it surfaces `cuda_missing`.
-
-## Sidecar Python environment
-
-The TTS sidecar runs as a child process spawned by Tauri. On Windows it uses a venv at `desktop/sidecar/.venv`:
-
-```powershell
-cd desktop\sidecar
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r ..\..\windows\sidecar-env\requirements.txt
-```
-
-`requirements.txt` includes `torch` built for CUDA 12.1 and the `qwen-tts` package.
-
-## Build the desktop binary
+## 快速构建
 
 ```powershell
 cd desktop
@@ -44,27 +20,30 @@ pnpm install
 pnpm tauri build --target x86_64-pc-windows-msvc
 ```
 
-The bundler produces an MSI in `desktop\src-tauri\target\release\bundle\msi\`. The MSI ships the app + sidecar Python launcher but **not** Qwen weights.
+MSI 输出位置：
 
-## Verification checklist (run on the Windows + CUDA box)
+```
+desktop\src-tauri\target\release\bundle\msi\
+```
 
-This is the only place these checks can run — the Mac development environment cannot exercise the Qwen path.
+## 验证清单（必须在带 CUDA 的 Windows 机器上执行）
 
-- [ ] `pnpm tauri dev` launches the app.
-- [ ] Initial state: `Get-Process python*` finds no sidecar process.
-- [ ] Trigger Realtime Play on a page. A `python.exe` child of the Tauri app appears.
-- [ ] `GET http://127.0.0.1:38219/healthz` returns 200 immediately.
-- [ ] First synth call loads Qwen — RAM/VRAM jumps once. Subsequent calls are fast.
-- [ ] Cache: replay the same page → no new generation, plays instantly from `%APPDATA%/com.podcast.reader/audio_cache/`.
-- [ ] Move `D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice` aside → app reports `model_path_missing` with the path.
-- [ ] On a non-CUDA test machine → app reports `cuda_missing`.
-- [ ] Idle 60 seconds → sidecar logs `unloaded`, VRAM drops back.
-- [ ] Build the MSI → install on a clean Windows VM → confirm the MSI does NOT contain anything under `D:\models\`.
+- [ ] `pnpm tauri dev` 启动成功。
+- [ ] 启动时 `Get-Process python*` 无子进程。
+- [ ] 点击 ▶ Play 后 `python.exe` 作为 Tauri 子进程出现。
+- [ ] `Invoke-WebRequest http://127.0.0.1:38219/healthz` 立即返回 200。
+- [ ] 首次合成时 RAM/VRAM 跳升一次。
+- [ ] 同一页第二次播放 → 直接命中 `%APPDATA%\com.podcast.reader\audio_cache\` 缓存。
+- [ ] 故意把 `D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice` 改名 → 应用返回 `model_path_missing` 并显示该路径。
+- [ ] 在无 CUDA 的机器上跑 → 返回 `cuda_missing`。
+- [ ] 闲置 60 秒 → 子进程日志输出 `unloaded`，VRAM 回落。
+- [ ] MSI 安装到干净的 Windows 虚拟机 → 验证 MSI **不**包含 `D:\models\` 下的任何文件。
 
-## Files in this directory
+## 本目录文件
 
-- `README.md` — this file.
-- `icons/icon.ico` — Windows app icon (replace with real artwork before shipping).
-- `installer/wix.config.json` — overrides for the WiX MSI bundler.
-- `sidecar-env/requirements.txt` — Python deps for the Qwen sidecar.
-- `sidecar-env/activate.ps1` — convenience activation script.
+- `README.md` —— 本文档（索引）
+- `INSTALL_zh-CN.md` —— 中文详细安装指南
+- `icons/icon.ico` —— Windows 图标占位
+- `installer/wix.config.json` —— WiX MSI 打包配置覆盖
+- `sidecar-env/requirements.txt` —— Qwen 子进程 Python 依赖
+- `sidecar-env/activate.ps1` —— 一键创建并激活 venv 的脚本

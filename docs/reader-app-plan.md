@@ -1,174 +1,174 @@
-# Reader App Implementation Plan
+# Reader App 实施方案
 
-## Summary
+## 概述
 
-Build a Tauri v2 native desktop reader app for Windows and macOS from one shared React/TypeScript UI codebase. The app starts light: no TTS model loads at launch. A lazy local Python TTS sidecar starts only when the user generates or plays audio, keeps the model warm briefly, then unloads after an idle timeout.
+构建一个 Tauri v2 原生桌面阅读应用，Windows 与 macOS 共用一份 React/TypeScript UI 代码。应用启动**轻量**：启动时不加载任何 TTS 模型。本地 Python TTS 子进程仅在用户触发音频生成或播放时启动，短暂维持模型常驻，达到空闲超时后卸载。
 
-Windows uses external Qwen model folders under `D:\models` and requires CUDA. macOS uses bundled Kokoro from `models/Kokoro-82M`. Android is Phase 2 and should use a bundled Kokoro mobile runtime rather than the desktop Python sidecar.
+Windows 使用位于 `D:\models` 下的外部 Qwen 模型并需要 CUDA。macOS 使用仓库内 LFS 管理的 Kokoro 权重（`models/Kokoro-82M`）。Android 是 Phase 2，使用绑定的 Kokoro 移动版运行时，而**不是**桌面端的 Python 子进程方案。
 
-## Product Requirements
+## 产品需求
 
-- Import TXT and EPUB books.
-- Main screen shows imported books on a realistic bookshelf-style visual.
-- Each book appears as a cover/spine with its title.
-- Bottom shelf includes an add/import button.
-- Import flow offers an option to generate audio immediately.
-- Reader mode opens when a book is selected.
-- Reader page supports left/right tap regions for page turns.
-- Center tap shows hidden controls.
-- Bottom controls auto-hide after inactivity.
-- Bottom-right shows reading progress percentage.
-- Controls include:
-  - Font size: small, medium, large.
-  - Background color: 10 presets, including eye-protect green.
-  - Brightness: dark to bright.
-  - Content/table-of-contents button.
-- TTS supports:
-  - Offline generation for whole book.
-  - Offline generation for selected section.
-  - Realtime current-page generation and playback.
-  - Progress percentage for offline generation.
-  - Permanent audio cache shared by offline and realtime modes.
+- 导入 TXT 与 EPUB 书籍。
+- 主界面以**真实书架**视觉呈现已导入的书。
+- 每本书显示为书脊/书皮形态，标题清晰可见。
+- 书架底部包含"添加 / 导入"按钮。
+- 导入流程提供"立刻生成全书音频"选项。
+- 选中书籍即进入阅读模式。
+- 阅读页支持**左右轻触翻页**。
+- **中部轻触**呼出隐藏控件。
+- 底部控件**无操作后自动隐藏**。
+- 底部右下角显示**阅读进度百分比**。
+- 控件包含：
+  - 字号：小 / 中 / 大
+  - 背景：10 种预设，含护眼绿
+  - 亮度：暗 ↔ 亮
+  - 目录 / TOC 按钮
+- TTS 支持：
+  - 全书离线生成
+  - 选定章节离线生成
+  - 当前页实时生成并播放
+  - 离线任务带进度百分比
+  - 离线与实时**共用同一份永久音频缓存**
 
-## Architecture
+## 架构
 
-Use a Tauri v2 app with these layers:
+Tauri v2 应用分层如下：
 
-- UI: React + TypeScript + Vite.
-- Native shell: Rust/Tauri commands.
-- Storage: SQLite in the app data directory.
-- Assets: generated bookshelf art and bundled Kokoro resources.
-- TTS: lazy Python service managed as a Tauri sidecar on desktop.
-- Audio cache: WAV chunks stored in app data, indexed in SQLite.
+- UI：React + TypeScript + Vite
+- 原生壳：Rust / Tauri 命令
+- 存储：app 数据目录下的 SQLite
+- 资产：生成的书架美术 + 绑定的 Kokoro 资源
+- TTS：桌面端通过 Tauri sidecar 管理的懒加载 Python 服务
+- 音频缓存：WAV 分块落盘 app 数据目录，索引存 SQLite
 
-The frontend must not directly access arbitrary local files. File import, cache reads, model readiness checks, and sidecar lifecycle should go through Tauri commands.
+前端**禁止**直接读写任意本地文件。文件导入、缓存读取、模型就绪检查、子进程生命周期一律走 Tauri 命令。
 
-## Data Model
+## 数据模型
 
-Use SQLite tables or equivalent migrations for:
+SQLite 表（或等效迁移）：
 
-- `books`: id, title, author, source format, imported path/hash, created time.
-- `sections`: id, book id, title, order, source range.
-- `pages`: id, book id, section id, page index, text hash, text content or content pointer.
-- `reading_positions`: book id, section id, page index, percent, updated time.
-- `tts_jobs`: id, book id, scope, status, progress, engine, voice preset, created time.
-- `audio_chunks`: id, book id, page/section/chunk id, cache key, path, duration, engine, voice preset, text hash.
-- `settings`: reader defaults and TTS defaults.
+- `books`：id、title、author、source_format、imported path/hash、created_at
+- `sections`：id、book_id、title、order、source range
+- `pages`：id、book_id、section_id、page_index、text_hash、content（或指针）
+- `reading_positions`：book_id、section_id、page_index、percent、updated_at
+- `tts_jobs`：id、book_id、scope、status、progress、engine、voice_preset、created_at
+- `audio_chunks`：id、book_id、page/section/chunk id、cache_key、path、duration、engine、voice_preset、text_hash
+- `settings`：阅读器默认值 + TTS 默认值
 
-The exact schema can evolve during implementation, but cache keys must include source text hash, engine, model version/path, voice preset, language setting, and speed/style settings.
+具体 schema 可在实施过程中演进，但 **`cache_key` 必须包含**：源文本哈希、引擎、模型版本/路径、音色、语言、语速 / 风格。
 
-## Book Import And Pagination
+## 导入与分页
 
-TXT import:
+TXT 导入：
 
-- Read text as UTF-8 by default.
-- Normalize line endings.
-- Split into sections using headings when obvious, otherwise one section.
-- Paginate by measured reader layout where possible, or by deterministic text chunks for v1.
+- 默认按 UTF-8 读取
+- 归一化换行符
+- 优先按明显标题切章节，否则归为单章
+- 优先按真实排版测量分页；v1 可用确定性文本块代替
 
-EPUB import:
+EPUB 导入：
 
-- Parse metadata title/author.
-- Use EPUB spine order for reading order.
-- Use the EPUB TOC when available.
-- Store chapters as sections.
-- Strip unsupported scripts/styles and keep readable text content.
+- 解析 title / author 元数据
+- 使用 spine 顺序作为阅读顺序
+- 优先使用 EPUB TOC
+- 章节存为 sections
+- 剥离不支持的脚本 / 样式，保留可读文本
 
-Pagination must be stable enough that reading progress and audio chunk mapping survive restarts. If a setting change changes pagination, preserve progress by source text offset rather than only page number.
+分页要足够稳定，让阅读进度与音频块映射在重启后存活。**字号变更导致分页变化时，按源文本偏移而非页号保留进度。**
 
-## Reader UX
+## 阅读 UX
 
-Reader screen layout:
+阅读界面布局：
 
-- Full reading surface.
-- Left third turns to previous page.
-- Right third turns to next page.
-- Center third toggles controls.
-- Bottom control bar overlays content and auto-hides.
-- Reading progress percentage stays at bottom right.
-- Content/TOC opens as a side panel or modal.
+- 全屏阅读区
+- 左 1/3 → 上一页
+- 右 1/3 → 下一页
+- 中 1/3 → 切换控件
+- 底部控件覆盖在内容上，自动隐藏
+- 右下角始终显示阅读进度百分比
+- 目录以侧栏或模态弹出
 
-Settings:
+设置：
 
-- Font size presets map to fixed app typography values.
-- Background presets include white, warm paper, dark, black, gray, sepia, low contrast, and eye-protect green.
-- Brightness applies a visual dimming layer or theme adjustment without changing system brightness.
+- 字号预设映射到固定的 typography 值
+- 背景预设：白、暖纸、深色、纯黑、灰、米色、低对比、护眼绿，等
+- 亮度通过 UI 顶层暗化层或主题调节实现，**不**改系统亮度
 
-## Bookshelf UX
+## 书架 UX
 
-The bookshelf screen should feel like a real shelf, not a plain grid.
+书架页要**像真书架**，不是普通网格：
 
-- Use a generated bitmap shelf background checked into the app assets.
-- Render book covers/spines aligned to shelf rows.
-- Show book title prominently on each book.
-- Keep the add/import button at the bottom shelf area.
-- Empty state should still show the shelf and invite import.
+- 用生成的 bitmap 书架背景，提交进 app 资产
+- 书皮 / 书脊按书架行对齐
+- 书脊上突出显示书名
+- 底部留出"导入"按钮
+- 空状态也展示书架并邀请用户导入
 
-Do not build a marketing landing page. The first screen should be the usable library.
+**禁止做营销首页。** 首屏就是可用的图书馆。
 
-## TTS Behavior
+## TTS 行为
 
-No model should load on app launch.
+应用启动时**不加载任何模型**。
 
-When generation or realtime playback starts:
+生成或实时播放开始时：
 
-1. Tauri starts or wakes the Python TTS service.
-2. The service checks engine readiness.
-3. The selected model loads lazily.
-4. The job is split into chunks.
-5. Each chunk is generated to a WAV file.
-6. SQLite is updated as chunks complete.
-7. Progress events stream back to the UI.
-8. The worker unloads after an idle timeout.
+1. Tauri 启动或唤醒 Python TTS 服务
+2. 服务检查引擎就绪
+3. 选定模型懒加载
+4. 任务切分成块
+5. 每块生成 WAV
+6. 块完成时更新 SQLite
+7. 进度事件流式回传 UI
+8. 空闲超时后 worker 卸载
 
-Offline generation:
+离线生成：
 
-- Scope can be whole book or selected section.
-- Show queued/loading/generating/cached/failed/canceled/completed states.
-- Progress is chunk-based.
-- Completed chunks remain usable after cancellation or failure.
+- scope 可为全书或选定章节
+- 状态包括 queued / loading / generating / cached / failed / canceled / completed
+- 进度按块计算
+- **取消或失败后已完成的块仍可用**
 
-Realtime generation:
+实时生成：
 
-- Default scope is the current page.
-- Generate and play the visible page.
-- Prefetch the next page.
-- Write generated chunks to the same permanent cache used by offline generation.
-- If cached audio already exists, play from cache immediately.
+- 默认 scope 为当前页
+- 生成并播放可见页
+- 预取下一页
+- 生成的块写入与离线模式**共用**的永久缓存
+- 已缓存则立即从缓存播放
 
-Audio format:
+音频格式：
 
-- Use WAV chunks for v1 reliability.
-- Add compression later only after playback and packaging are stable.
+- v1 用 WAV 块保证可靠性
+- 压缩格式等播放与打包稳定后再加
 
-## Platform TTS Engines
+## 各平台 TTS 引擎
 
-Windows:
+Windows：
 
-- Use Qwen through the `qwen-tts` Python package.
-- Use external model paths:
+- 使用 Python 包 `qwen-tts`
+- 外部模型路径：
   - `D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice`
   - `D:\models\Qwen3-TTS-Tokenizer-12Hz`
-- Require NVIDIA CUDA.
-- Show a clear readiness error if CUDA or model paths are unavailable.
-- Do not promise CPU fallback in v1.
+- 必须 NVIDIA CUDA
+- CUDA 或模型路径不可用时弹出清晰的就绪错误
+- v1 **不**承诺 CPU 兜底
 
-macOS:
+macOS：
 
-- Use Kokoro bundled under `models/Kokoro-82M`.
-- Package Kokoro resources with the app.
-- Keep the same cache, job, and playback interfaces as Windows.
+- 使用绑定的 `models/Kokoro-82M`
+- Kokoro 资源随应用打包
+- 缓存、任务、播放接口与 Windows 完全一致
 
-Android Phase 2:
+Android Phase 2：
 
-- Reuse library/reader UX concepts.
-- Bundle Kokoro assets.
-- Use an Android-appropriate runtime, likely ONNX/int8 or another mobile-compatible Kokoro pipeline.
-- Do not use the desktop Python sidecar architecture.
+- 复用阅读 / 书架 UX 概念
+- 绑定 Kokoro 资源
+- 使用移动端友好的运行时（很可能是 ONNX / int8 或其它移动 Kokoro 管线）
+- **不**使用桌面端的 Python 子进程架构
 
-## Public Interfaces
+## 对外接口
 
-Frontend-to-Tauri commands:
+前端 → Tauri 命令：
 
 - `import_book(path, generate_audio)`
 - `list_books()`
@@ -181,7 +181,7 @@ Frontend-to-Tauri commands:
 - `play_cached_or_generate(book_id, page_id, voice_preset)`
 - `get_tts_status()`
 
-TTS service endpoints:
+TTS 服务端点：
 
 - `GET /healthz`
 - `GET /ready`
@@ -191,72 +191,72 @@ TTS service endpoints:
 - `POST /tts/jobs/{id}/cancel`
 - `POST /tts/realtime`
 
-## Development Order
+## 开发顺序
 
-1. Scaffold Tauri v2 + React/TypeScript/Vite.
-2. Add SQLite store and migrations.
-3. Implement TXT import and basic bookshelf.
-4. Implement reader pagination and reading position persistence.
-5. Add reader controls and themes.
-6. Add EPUB import.
-7. Add generated bookshelf art.
-8. Add audio cache schema and cache file management.
-9. Add Python sidecar shell with health checks only.
-10. Add Kokoro generation on macOS/dev-compatible path.
-11. Add Qwen generation on Windows CUDA path.
-12. Add offline generation jobs.
-13. Add realtime page playback and prefetch.
-14. Package Windows and macOS builds.
-15. Plan Android Phase 2.
+1. Tauri v2 + React/TypeScript/Vite 脚手架
+2. SQLite 存储 + 迁移
+3. TXT 导入 + 基础书架
+4. 阅读分页 + 进度持久化
+5. 阅读控件 + 主题
+6. EPUB 导入
+7. 生成书架美术
+8. 音频缓存 schema + 文件管理
+9. Python 子进程壳，只跑健康检查
+10. macOS / 通用路径上的 Kokoro 生成
+11. Windows CUDA 路径上的 Qwen 生成
+12. 离线生成任务
+13. 实时页播放 + 预取
+14. Windows / macOS 打包
+15. 规划 Android Phase 2
 
-## Test Plan
+## 测试方案
 
-Import tests:
+导入测试：
 
-- TXT import creates one or more sections.
-- EPUB import preserves title, reading order, and TOC.
-- Duplicate imports do not create confusing duplicates.
-- Invalid files show actionable errors.
+- TXT 导入产生一个或多个章节
+- EPUB 导入保留 title、阅读顺序、TOC
+- 重复导入不产生混乱副本
+- 无效文件给出可操作错误
 
-Reader tests:
+阅读测试：
 
-- Left/right regions turn pages.
-- Center region toggles controls.
-- Controls auto-hide.
-- Font/background/brightness settings persist.
-- Progress percentage updates and restores after restart.
-- TOC navigation opens the correct section.
+- 左右区域翻页
+- 中区切换控件
+- 控件自动隐藏
+- 字号 / 背景 / 亮度持久化
+- 进度百分比刷新并在重启后恢复
+- TOC 跳转到正确章节
 
-TTS tests:
+TTS 测试：
 
-- App launch does not load a model.
-- First TTS request starts the sidecar.
-- Health check works before model load.
-- Offline generation reports progress to 100%.
-- Cancel stops remaining chunks and preserves completed chunks.
-- Realtime playback writes permanent cache chunks.
-- Cached chunks replay without regeneration.
-- Idle timeout unloads the worker.
+- 应用启动不加载模型
+- 首次 TTS 请求启动子进程
+- 模型加载前 `/healthz` 已可用
+- 离线生成进度到 100%
+- 取消停止剩余块且保留已完成块
+- 实时播放写入永久缓存块
+- 缓存块无需重生即可重放
+- 空闲超时卸载 worker
 
-Platform tests:
+平台测试：
 
-- Windows reports missing CUDA clearly.
-- Windows reports missing Qwen model paths clearly.
-- macOS packaged app can locate bundled Kokoro resources.
-- WAV playback works from app data paths.
+- Windows 报告 CUDA 缺失要清晰
+- Windows 报告 Qwen 模型路径缺失要清晰
+- 打包的 macOS 应用能定位绑定的 Kokoro 资源
+- WAV 可从 app 数据路径播放
 
-Packaging tests:
+打包测试：
 
-- Windows package does not include Qwen weights.
-- macOS package includes Kokoro resources.
-- GitHub clone with Git LFS pulls model files correctly.
+- Windows 安装包**不**包含 Qwen 权重
+- macOS 安装包**包含**Kokoro 资源
+- 用 Git LFS 从 GitHub 克隆能正确拉取模型
 
-## Acceptance Criteria
+## 验收标准
 
-- A user can import TXT and EPUB books and read them with persistent progress.
-- The main screen presents a bookshelf-style library, not a plain file list.
-- TTS is never loaded on initial app start.
-- Offline and realtime TTS both write to the same permanent WAV cache.
-- Windows uses external Qwen models and requires CUDA.
-- macOS uses bundled Kokoro.
-- The project remains ready for Android Phase 2 without rewriting the reader model.
+- 用户可以导入 TXT/EPUB 并以持久化进度阅读。
+- 主界面是书架样式的图书馆，不是普通文件列表。
+- 应用初次启动**不会**加载 TTS。
+- 离线与实时 TTS 都写入同一份永久 WAV 缓存。
+- Windows 使用外部 Qwen 模型且要求 CUDA。
+- macOS 使用绑定的 Kokoro。
+- 项目随时可以进入 Android Phase 2，**不需要**重写阅读模型。
