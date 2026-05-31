@@ -123,6 +123,10 @@ def paginate(body: str, base_offset: int) -> list[tuple[str, int, int]]:
     start = 0
     while start < total:
         end = min(start + PAGE_BYTES, total)
+        # Snap end backwards to a UTF-8 char boundary BEFORE slicing — matches
+        # the Rust/Kotlin fix. Continuation bytes have bit pattern 10xxxxxx.
+        while end > start and end < total and (body_bytes[end] & 0xC0) == 0x80:
+            end -= 1
         if end < total:
             chunk = body_bytes[start:end]
             split_at = chunk.rfind(b"\n\n")
@@ -132,9 +136,13 @@ def paginate(body: str, base_offset: int) -> list[tuple[str, int, int]]:
                 space_at = chunk.rfind(b" ")
                 if space_at != -1 and space_at > PAGE_BYTES // 2:
                     end = start + space_at + 1
-        # Don't cut in the middle of a UTF-8 codepoint.
+        # Belt-and-suspenders: advance past any continuation bytes.
         while end < total and (body_bytes[end] & 0xC0) == 0x80:
             end += 1
+        if end <= start:
+            end = start + 1
+            while end < total and (body_bytes[end] & 0xC0) == 0x80:
+                end += 1
         chunk_text = body_bytes[start:end].decode("utf-8", errors="ignore")
         pages.append((chunk_text, base_offset + start, end - start))
         start = end

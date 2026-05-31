@@ -204,6 +204,12 @@ fn paginate<'a>(body: &'a str, base_offset: usize) -> Vec<PageChunk<'a>> {
     let mut start = 0;
     while start < total {
         let mut end = (start + PAGE_BYTES).min(total);
+        // CRITICAL: snap `end` backwards to the nearest UTF-8 char boundary
+        // BEFORE slicing, otherwise `body[start..end]` panics on CJK text
+        // (e.g. PAGE_BYTES might land in the middle of a 3-byte 中文 char).
+        while end > start && end < total && !body.is_char_boundary(end) {
+            end -= 1;
+        }
         // Snap to nearest paragraph boundary backwards if possible.
         if end < total {
             if let Some(rel) = body[start..end].rfind("\n\n") {
@@ -218,9 +224,17 @@ fn paginate<'a>(body: &'a str, base_offset: usize) -> Vec<PageChunk<'a>> {
                 }
             }
         }
-        // Don't break in the middle of a UTF-8 codepoint.
+        // Belt-and-suspenders: forward-snap in case the candidate above
+        // landed on a non-boundary (shouldn't happen, but cheap to verify).
         while end < total && !body.is_char_boundary(end) {
             end += 1;
+        }
+        // If for any reason we couldn't advance, force progress by one char.
+        if end <= start {
+            end = start + 1;
+            while end < total && !body.is_char_boundary(end) {
+                end += 1;
+            }
         }
         pages.push(PageChunk {
             text: &body[start..end],
@@ -276,6 +290,40 @@ mod tests {
             // We additionally re-validate that each chunk is valid UTF-8.
             assert!(std::str::from_utf8(p.text.as_bytes()).is_ok());
         }
+    }
+
+    #[test]
+    fn paginate_handles_cjk_at_page_boundary_without_panic() {
+        // Regression for the crash hit on 道诡异仙.txt: PAGE_BYTES=1800 landed
+        // inside a 3-byte 中文 codepoint and `body[start..end]` panicked.
+        //
+        // Build a body where the byte at PAGE_BYTES sits in the middle of a
+        // multi-byte char and there's no \n\n or space in the second half
+        // of the window — both refinement branches must be skipped cleanly.
+        let s: String = std::iter::repeat('不').take(1000).collect(); // 3000 bytes, no whitespace
+        let pages = paginate(&s, 0);
+        // Must not panic; chunks must round-trip cleanly through UTF-8.
+        let mut joined = String::new();
+        for p in &pages {
+            assert!(std::str::from_utf8(p.text.as_bytes()).is_ok());
+            joined.push_str(p.text);
+        }
+        assert_eq!(joined, s, "paginate must not drop any source bytes");
+    }
+
+    #[test]
+    fn paginate_handles_real_chinese_novel_passage() {
+        // The exact opening paragraph of 道诡异仙 that triggered the original
+        // panic at byte 1800 of '不'.
+        let mut s = String::new();
+        // Repeat enough Chinese text to easily exceed PAGE_BYTES.
+        for _ in 0..50 {
+            s.push_str("李火旺举起手中的捣药杆，百无聊赖的一下一下砸在捣药罐里，把里面夹杂着淤泥的流光青石慢慢碾磨成粉末。虽然这溶洞潮湿寒冷，但是他身上也只穿着一件粗糙布衣。但是他却满脸不在乎，似乎并没有把这一切放在眼里。");
+        }
+        let pages = paginate(&s, 0);
+        assert!(pages.len() >= 2);
+        let joined: String = pages.iter().map(|p| p.text).collect();
+        assert_eq!(joined, s);
     }
 
     #[test]

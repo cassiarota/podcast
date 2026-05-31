@@ -87,6 +87,12 @@ pub fn import_epub_at_path(conn: &Connection, path: &Path) -> Result<String> {
         let mut start = 0usize;
         while start < body_len {
             let mut end = (start + PAGE_BYTES).min(body_len);
+            // CRITICAL: snap `end` backwards to a UTF-8 char boundary BEFORE
+            // slicing, otherwise `body[start..end]` panics on CJK text.
+            // Matches the fix in import_txt.rs::paginate.
+            while end > start && end < body_len && !body.is_char_boundary(end) {
+                end -= 1;
+            }
             if end < body_len {
                 if let Some(rel) = body[start..end].rfind("\n\n") {
                     let candidate = start + rel + 2;
@@ -102,6 +108,12 @@ pub fn import_epub_at_path(conn: &Connection, path: &Path) -> Result<String> {
             }
             while end < body_len && !body.is_char_boundary(end) {
                 end += 1;
+            }
+            if end <= start {
+                end = start + 1;
+                while end < body_len && !body.is_char_boundary(end) {
+                    end += 1;
+                }
             }
             let chunk = &body[start..end];
             let page_id = Uuid::new_v4().to_string();

@@ -19,6 +19,14 @@ object Paginator {
         var start = 0
         while (start < total) {
             var end = (start + PAGE_BYTES).coerceAtMost(total)
+            // CRITICAL: snap `end` backwards to a UTF-8 char boundary BEFORE
+            // decodeToString, otherwise the decoded String contains a U+FFFD
+            // replacement at the boundary and `lastIndexOf` operates on a
+            // String whose char→byte offsets no longer round-trip cleanly.
+            // (Continuation bytes have the bit pattern 10xxxxxx.)
+            while (end > start && end < total && (bytes[end].toInt() and 0xC0) == 0x80) {
+                end -= 1
+            }
             if (end < total) {
                 val window = bytes.decodeToString(start, end)
                 val paragraph = window.lastIndexOf("\n\n")
@@ -31,9 +39,17 @@ object Paginator {
                     }
                 }
             }
-            // Don't cut in the middle of a UTF-8 codepoint.
+            // Belt-and-suspenders: advance forward past any continuation bytes
+            // (covers the case where `end` came from rfind on a non-ASCII char).
             while (end < total && (bytes[end].toInt() and 0xC0) == 0x80) {
                 end += 1
+            }
+            // Force progress if we somehow couldn't advance.
+            if (end <= start) {
+                end = start + 1
+                while (end < total && (bytes[end].toInt() and 0xC0) == 0x80) {
+                    end += 1
+                }
             }
             val chunk = bytes.decodeToString(start, end)
             out.add(PageChunk(chunk, baseOffset + start, end - start))
