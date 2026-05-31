@@ -8,20 +8,23 @@ fastapi>=0.115
 uvicorn>=0.32
 pydantic>=2.9
 
-# Audio output
-numpy>=1.26
+# Audio output.
+# numpy < 2: torch 2.2 (the only macOS x86_64 wheel still on PyPI) is not
+# numpy 2.x compatible. Apple Silicon arm64 Python can use torch 2.4+ which
+# is fine with numpy 2, but pinning < 2 is the safe lowest common denominator.
+numpy>=1.26,<2
 soundfile>=0.12
 
-# Kokoro core
+# Kokoro core (KModel + KPipeline)
 kokoro>=0.9
+
+# transformers < 5: Kokoro 0.9 loads CustomAlbert via transformers. v5
+# requires torch >= 2.4 and rejects 2.2 outright. v4.x supports both torch
+# 2.2 (x86_64 macOS) and torch 2.4+ (arm64 macOS).
+transformers>=4.40,<5
 
 # misaki = Kokoro's text → phoneme frontend.
 # kokoro pulls misaki[en] automatically. Add language extras you want to use:
-misaki[zh]>=0.7   # Chinese (Mandarin) — adds jieba + pypinyin + cn2an
-misaki[ja]>=0.7   # Japanese — adds pyopenjtalk
+misaki[zh]>=0.9   # Chinese (Mandarin) — adds jieba + pypinyin + cn2an
+misaki[ja]>=0.9   # Japanese — adds pyopenjtalk
 # misaki[ko]      # Korean — uncomment if you want Korean
-
-# Note: torch is pulled in transitively by kokoro. If you want to pin a
-# specific version, add it here AFTER kokoro to avoid the resolver picking
-# a CUDA wheel by accident:
-#   torch>=2.4,<3.0

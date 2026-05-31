@@ -90,9 +90,26 @@ class KokoroEngine(Engine):
                 paths=[model_path or ""],
             )
         try:
-            from kokoro import KPipeline  # type: ignore
+            from kokoro import KPipeline, KModel  # type: ignore
 
-            self._pipeline = KPipeline(lang_code=lang_code, repo_id=str(Path(model_path).parent))
+            # kokoro 0.9+ validates repo_id as a HuggingFace ID and rejects
+            # local paths. The correct local-files-only flow is to construct
+            # KModel with explicit config + model file paths, then pass the
+            # KModel into KPipeline.
+            model_dir = Path(model_path).parent
+            config_path = model_dir / "config.json"
+            if not config_path.exists():
+                raise NotReadyError(
+                    reason="model_config_missing",
+                    message=f"Kokoro config.json not found at {config_path}",
+                    paths=[str(config_path)],
+                )
+            kmodel = KModel(config=str(config_path), model=str(model_path))
+            self._pipeline = KPipeline(
+                lang_code=lang_code,
+                model=kmodel,
+                repo_id="hexgrad/Kokoro-82M",   # informational only; model is local
+            )
             self._pipeline_lang = lang_code
         except ImportError as exc:
             raise NotReadyError(
