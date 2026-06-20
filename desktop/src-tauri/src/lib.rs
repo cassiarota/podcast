@@ -6,6 +6,7 @@ pub mod notes;
 pub mod reader;
 pub mod sidecar;
 pub mod stats;
+pub mod storage;
 pub mod tts;
 
 use std::sync::Arc;
@@ -34,20 +35,25 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
-            let data_dir = app
+            let app_data_dir = app
                 .path()
                 .app_data_dir()
                 .expect("app_data_dir must be available");
+            std::fs::create_dir_all(&app_data_dir).ok();
+            let storage_settings = storage::load_storage_settings()?;
+            let data_dir = storage_settings.data_dir_path();
+            let audio_dir = storage_settings.audio_dir_path();
             std::fs::create_dir_all(&data_dir).ok();
-            std::fs::create_dir_all(data_dir.join("audio_cache")).ok();
+            std::fs::create_dir_all(&audio_dir).ok();
 
-            let db_path = data_dir.join("library.db");
+            let db_path = storage_settings.db_path();
             let conn = db::open(&db_path)?;
             db::migrate(&conn)?;
 
             let resource_dir = app.path().resource_dir().ok();
-            let sidecar = Arc::new(SidecarState::new(data_dir.clone(), resource_dir));
+            let sidecar = Arc::new(SidecarState::new(app_data_dir.clone(), audio_dir, resource_dir));
 
             // LFS sanity check: warn if Kokoro pointer wasn't pulled.
             if let Some(rd) = sidecar.kokoro_model_path() {
@@ -93,11 +99,15 @@ pub fn run() {
             reader::first_page_of_section,
             reader::get_reading_position,
             reader::save_reading_position,
+            reader::get_playback_position,
+            reader::save_playback_position,
             reader::get_reader_settings,
             reader::save_reader_settings,
             reader::get_tts_settings,
             reader::save_tts_settings,
             reader::list_engines,
+            storage::get_storage_settings,
+            storage::save_storage_settings,
             tts::start_tts_job,
             tts::cancel_tts_job,
             tts::play_cached_or_generate,

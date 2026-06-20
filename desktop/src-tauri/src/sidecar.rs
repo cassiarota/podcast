@@ -15,6 +15,7 @@ const HEALTH_TIMEOUT_MS: u64 = 8_000;
 /// it off, called from inside TTS commands (`start_tts_job`, `play_cached_or_generate`).
 pub struct SidecarState {
     pub data_dir: PathBuf,
+    audio_cache_dir: PathBuf,
     pub resource_dir: Option<PathBuf>,
     child: Mutex<Option<Child>>,
     port: AtomicU16,
@@ -22,9 +23,10 @@ pub struct SidecarState {
 }
 
 impl SidecarState {
-    pub fn new(data_dir: PathBuf, resource_dir: Option<PathBuf>) -> Self {
+    pub fn new(data_dir: PathBuf, audio_cache_dir: PathBuf, resource_dir: Option<PathBuf>) -> Self {
         Self {
             data_dir,
+            audio_cache_dir,
             resource_dir,
             child: Mutex::new(None),
             port: AtomicU16::new(DEFAULT_PORT),
@@ -52,7 +54,7 @@ impl SidecarState {
     }
 
     pub fn audio_cache_dir(&self) -> PathBuf {
-        self.data_dir.join("audio_cache")
+        self.audio_cache_dir.clone()
     }
 
     /// Returns the absolute path of the bundled Kokoro `.pth` file on macOS,

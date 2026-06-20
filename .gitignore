@@ -5,6 +5,8 @@ target/
 .venv/
 __pycache__/
 *.pyc
+*.log
+desktop/native-*.png
 
 # desktop app build outputs
 desktop/dist/

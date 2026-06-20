@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability set for the reader app","local":true,"windows":["main"],"permissions":["core:default","dialog:default","fs:default","fs:allow-read-file","shell:default"]}}
+{"default":{"identifier":"default","description":"Default capability set for the reader app","local":true,"windows":["main"],"permissions":["core:default","dialog:default","fs:default","fs:allow-read-file","shell:default","clipboard-manager:allow-write-text"]}}

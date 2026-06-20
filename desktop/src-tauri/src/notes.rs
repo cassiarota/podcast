@@ -1,6 +1,6 @@
 //! Notes / highlights — user-saved sentences from books.
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
@@ -14,6 +14,7 @@ pub struct Note {
     pub book_title: String,
     pub page_id: Option<String>,
     pub sentence_index: Option<i64>,
+    pub page_index: Option<i64>,
     pub text: String,
     pub created_at: i64,
 }
@@ -55,9 +56,10 @@ pub fn list_notes(
 ) -> Result<Vec<Note>, String> {
     let conn = state.db.lock();
     let mut sql = String::from(
-        "SELECT n.id, n.book_id, b.title, n.page_id, n.sentence_index, n.text, n.created_at
+        "SELECT n.id, n.book_id, b.title, n.page_id, n.sentence_index, p.page_index, n.text, n.created_at
          FROM notes n
          LEFT JOIN books b ON b.id = n.book_id
+         LEFT JOIN pages p ON p.id = n.page_id
          WHERE 1=1",
     );
     let mut params_dyn: Vec<rusqlite::types::Value> = Vec::new();
@@ -81,8 +83,9 @@ pub fn list_notes(
                 book_title: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
                 page_id: r.get(3)?,
                 sentence_index: r.get(4)?,
-                text: r.get(5)?,
-                created_at: r.get(6)?,
+                page_index: r.get(5)?,
+                text: r.get(6)?,
+                created_at: r.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -130,7 +133,6 @@ pub fn list_books_with_notes(state: State<AppState>) -> Result<Vec<NotedBook>, S
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rusqlite::Connection;
 
     #[test]

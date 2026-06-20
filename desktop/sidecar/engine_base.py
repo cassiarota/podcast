@@ -9,7 +9,7 @@ from __future__ import annotations
 import abc
 import wave
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 
 class NotReadyError(RuntimeError):
@@ -45,6 +45,21 @@ class Engine(abc.ABC):
         speed: float = 1.0,
     ) -> int:
         """Write a WAV to `out_path` and return its duration in milliseconds."""
+
+    def synthesize_many(
+        self,
+        texts: Sequence[str],
+        out_paths: Sequence[str],
+        *,
+        voice: str = "default",
+        language: str = "en",
+        speed: float = 1.0,
+    ) -> list[int]:
+        """Write one WAV per text and return durations in matching order."""
+        return [
+            self.synthesize(text, out_path, voice=voice, language=language, speed=speed)
+            for text, out_path in zip(texts, out_paths)
+        ]
 
     @staticmethod
     def wav_duration_ms(path: Path | str) -> int:

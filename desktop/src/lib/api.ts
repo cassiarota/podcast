@@ -61,6 +61,17 @@ export interface TtsSettings {
   importsBackupDir: string | null;
 }
 
+export interface PlaybackPosition {
+  book_id: string;
+  page_id: string;
+  sentence_index: number;
+}
+
+export interface StorageSettings {
+  dataDir: string;
+  audioDir: string;
+}
+
 export interface LanguageInfo {
   code: string;
   label: string;
@@ -133,6 +144,14 @@ export const api = {
       sourceOffset,
       percent,
     }),
+  getPlaybackPosition: (bookId: string): Promise<PlaybackPosition | null> =>
+    invoke("get_playback_position", { bookId }),
+  savePlaybackPosition: (
+    bookId: string,
+    pageId: string,
+    sentenceIndex: number,
+  ): Promise<void> =>
+    invoke("save_playback_position", { bookId, pageId, sentenceIndex }),
   getReaderSettings: (): Promise<ReaderSettings> =>
     invoke("get_reader_settings"),
   saveReaderSettings: (settings: ReaderSettings): Promise<void> =>
@@ -142,6 +161,10 @@ export const api = {
   saveTtsSettings: (settings: TtsSettings): Promise<void> =>
     invoke("save_tts_settings", { settings }),
   listEngines: (): Promise<EngineInfo[]> => invoke("list_engines"),
+  getStorageSettings: (): Promise<StorageSettings> =>
+    invoke("get_storage_settings"),
+  saveStorageSettings: (settings: StorageSettings): Promise<void> =>
+    invoke("save_storage_settings", { settings }),
 
   // M3+ TTS
   startTtsJob: (
@@ -188,8 +211,8 @@ export const api = {
 
   // Streaming TTS — synthesize one sentence at a time, frontend strings
   // them together.
-  synthSentence: (text: string): Promise<AudioChunk> =>
-    invoke("synth_sentence", { text }),
+  synthSentence: (text: string, bookId?: string): Promise<AudioChunk> =>
+    invoke("synth_sentence", { text, bookId }),
 };
 
 export interface Note {
@@ -198,6 +221,7 @@ export interface Note {
   book_title: string;
   page_id: string | null;
   sentence_index: number | null;
+  page_index: number | null;
   text: string;
   created_at: number;
 }

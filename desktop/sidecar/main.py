@@ -30,6 +30,21 @@ class SynthRequest(BaseModel):
     engine: Optional[str] = None
     voice: str = "default"
     cache_key: Optional[str] = None
+    cache_subdir: Optional[str] = None
+    speed: float = 1.0
+    language: str = "en"
+
+
+class BatchSynthItem(BaseModel):
+    text: str
+    cache_key: Optional[str] = None
+
+
+class BatchSynthRequest(BaseModel):
+    items: list[BatchSynthItem]
+    engine: Optional[str] = None
+    voice: str = "default"
+    cache_subdir: Optional[str] = None
     speed: float = 1.0
     language: str = "en"
 
@@ -151,8 +166,8 @@ def make_app(state: State) -> FastAPI:
             )
 
         key = req.cache_key or _derive_cache_key(req.text, state.engine_name, req.voice, req.language, req.speed)
-        path = state.audio_cache / f"{key}.wav"
-        state.audio_cache.mkdir(parents=True, exist_ok=True)
+        path = _audio_path(state.audio_cache, key, req.cache_subdir)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         if path.exists():
             duration = engine.wav_duration_ms(path)
@@ -172,6 +187,87 @@ def make_app(state: State) -> FastAPI:
                 },
             )
         return {"cache_key": key, "path": str(path), "duration_ms": duration}
+
+    @app.post("/tts/batch")
+    def synth_batch(req: BatchSynthRequest = Body(...)):
+        state.touch()
+        if not req.items:
+            return {"items": []}
+        requested = req.engine or state.engine_name
+        if state.engine is not None and state.engine.name != requested:
+            logger.info("engine swap: %s -> %s", state.engine.name, requested)
+            state.unload()
+            state.engine_name = requested
+        elif state.engine_name != requested:
+            state.engine_name = requested
+        try:
+            engine = state.ensure_engine()
+        except NotReadyError as exc:
+            return JSONResponse(status_code=503, content={"reason": exc.reason, "message": str(exc), "paths": exc.paths})
+        except Exception as exc:
+            import traceback
+            logger.exception("engine load failed")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reason": f"engine_load_failed:{type(exc).__name__}",
+                    "message": str(exc),
+                    "traceback": traceback.format_exc().splitlines()[-12:],
+                },
+            )
+
+        state.audio_cache.mkdir(parents=True, exist_ok=True)
+        results: list[dict] = []
+        missing_texts: list[str] = []
+        missing_paths: list[str] = []
+        missing_indexes: list[int] = []
+        for item in req.items:
+            key = item.cache_key or _derive_cache_key(item.text, state.engine_name, req.voice, req.language, req.speed)
+            path = _audio_path(state.audio_cache, key, req.cache_subdir)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists():
+                duration = engine.wav_duration_ms(path)
+                results.append({"cache_key": key, "path": str(path), "duration_ms": duration})
+            else:
+                missing_indexes.append(len(results))
+                missing_texts.append(item.text)
+                missing_paths.append(str(path))
+                results.append({"cache_key": key, "path": str(path), "duration_ms": 0})
+
+        if missing_texts:
+            try:
+                durations = engine.synthesize_many(
+                    missing_texts,
+                    missing_paths,
+                    voice=req.voice,
+                    language=req.language,
+                    speed=req.speed,
+                )
+            except Exception as exc:
+                import traceback
+                _empty_cuda_cache()
+                logger.exception("batch synthesize failed")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "reason": f"batch_synthesize_failed:{type(exc).__name__}",
+                        "message": str(exc),
+                        "traceback": traceback.format_exc().splitlines()[-12:],
+                    },
+                )
+            for result_index, duration in zip(missing_indexes, durations):
+                results[result_index]["duration_ms"] = duration
+            _empty_cuda_cache()
+
+        return {"items": results}
+
+    def _empty_cuda_cache():
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     @app.post("/tts/jobs")
     def create_job():
@@ -206,6 +302,15 @@ def _derive_cache_key(text: str, engine: str, voice: str, language: str, speed: 
     text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     raw = f"{text_hash}|{engine}|{voice}|{language}|{speed:.2f}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _audio_path(audio_cache: Path, cache_key: str, cache_subdir: Optional[str]) -> Path:
+    safe_key = Path(cache_key).name
+    if cache_subdir:
+        safe_subdir = Path(cache_subdir).name
+        if safe_subdir:
+            return audio_cache / safe_subdir / f"{safe_key}.wav"
+    return audio_cache / f"{safe_key}.wav"
 
 
 def main() -> None:

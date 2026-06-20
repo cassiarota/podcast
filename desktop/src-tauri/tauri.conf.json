@@ -30,14 +30,28 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../sidecar/main.py": "sidecar/main.py",
+      "../sidecar/engine_base.py": "sidecar/engine_base.py",
+      "../sidecar/engine_stub.py": "sidecar/engine_stub.py",
+      "../sidecar/engine_kokoro.py": "sidecar/engine_kokoro.py",
+      "../sidecar/engine_qwen.py": "sidecar/engine_qwen.py",
+      "../../models/Kokoro-82M/kokoro-v1_0.pth": "models/Kokoro-82M/kokoro-v1_0.pth"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
-      "icons/128x128@2x.png"
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
     ],
     "category": "Education",
     "shortDescription": "Local reader with offline TTS",
-    "longDescription": "Import TXT/EPUB books, read them on a bookshelf-style library, and generate audio locally."
+    "longDescription": "Import TXT/EPUB books, read them on a bookshelf-style library, and generate audio locally.",
+    "windows": {
+      "wix": {
+        "language": ["zh-CN"]
+      }
+    }
   },
   "plugins": {}
 }

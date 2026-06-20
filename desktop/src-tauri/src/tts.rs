@@ -54,10 +54,24 @@ struct SidecarSynthResult {
     path: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct SidecarErrorBody {
-    reason: String,
-    message: Option<String>,
+#[derive(Debug, Clone)]
+struct PageSentence {
+    page_id: String,
+    section_id: String,
+    sentence_index: usize,
+    text: String,
+}
+
+fn book_audio_folder(conn: &rusqlite::Connection, book_id: &str) -> rusqlite::Result<String> {
+    conn.query_row(
+        "SELECT title, source_path FROM books WHERE id = ?1",
+        params![book_id],
+        |r| {
+            let title: String = r.get(0)?;
+            let source_path: Option<String> = r.get(1)?;
+            Ok(cache::book_audio_folder_name(&title, source_path.as_deref(), book_id))
+        },
+    )
 }
 
 #[tauri::command]
@@ -96,14 +110,17 @@ pub async fn start_tts_job(
         .map_err(|e| e.to_string())?;
     }
 
-    let pages = {
+    let sentences = {
         let conn = state.db.lock();
-        load_pages_for_scope(&conn, &book_id, &scope).map_err(|e| e.to_string())?
+        load_sentences_for_scope(&conn, &book_id, &scope).map_err(|e| e.to_string())?
+    };
+    let book_folder = {
+        let conn = state.db.lock();
+        book_audio_folder(&conn, &book_id).map_err(|e| e.to_string())?
     };
 
-    let total = pages.len();
+    let total = sentences.len();
     let port = state.sidecar.port();
-    let audio_dir = state.sidecar.audio_cache_dir();
     // voice_for_task already resolved above from saved settings.
 
     let db = state.db.clone();
@@ -111,6 +128,7 @@ pub async fn start_tts_job(
     let engine_task = engine.clone();
     let window_clone = window.clone();
     let book_id_task = book_id.clone();
+    let book_folder_task = book_folder.clone();
 
     tokio::spawn(async move {
         let client = reqwest::Client::builder()
@@ -118,7 +136,7 @@ pub async fn start_tts_job(
             .build()
             .unwrap();
         let mut done = 0usize;
-        for (page_id, text) in &pages {
+        for sentence in &sentences {
             // Check for cancellation each iteration.
             let cancelled: bool = {
                 let conn = db.lock();
@@ -134,24 +152,79 @@ pub async fn start_tts_job(
                 break;
             }
 
-            let text_hash = hex::encode(Sha256::digest(text.as_bytes()));
+            let text_hash = hex::encode(Sha256::digest(sentence.text.as_bytes()));
             // Per-chunk language auto-detect (same logic as the realtime
             // path) — a multi-language book reads correctly even when
             // some chapters are in a different language than the user's
             // saved default.
             let mut voice_eff = voice_for_task.clone();
             let mut lang_eff = language_for_task.clone();
-            detect_and_override_voice(text, &mut voice_eff, &mut lang_eff, &engine_task);
+            detect_and_override_voice(&sentence.text, &mut voice_eff, &mut lang_eff, &engine_task);
             let key = cache::cache_key(&text_hash, &engine_task, &voice_eff, &lang_eff, speed_for_task);
-            let path = cache::cache_path(&audio_dir, &key);
-            if !path.exists() {
+            let cached = {
+                let conn = db.lock();
+                conn.query_row(
+                    "SELECT path, duration_ms FROM audio_sentences
+                     WHERE page_id = ?1 AND sentence_index = ?2 AND engine = ?3 AND voice_preset = ?4 AND text_hash = ?5 AND cache_key = ?6",
+                    params![
+                        sentence.page_id,
+                        sentence.sentence_index as i64,
+                        engine_task,
+                        voice_eff,
+                        text_hash,
+                        key
+                    ],
+                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)),
+                )
+                .optional()
+                .ok()
+                .flatten()
+            };
+            if cached
+                .as_ref()
+                .map(|(path, _)| std::path::Path::new(path).exists())
+                .unwrap_or(false)
+            {
+                let (path_str, duration_ms) = cached.unwrap();
+                let conn = db.lock();
+                let _ = conn.execute(
+                    "INSERT OR IGNORE INTO audio_chunks (id, book_id, page_id, section_id, sentence_index, cache_key, path, duration_ms, engine, voice_preset, text_hash, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    params![
+                        Uuid::new_v4().to_string(),
+                        book_id_task,
+                        sentence.page_id,
+                        sentence.section_id,
+                        sentence.sentence_index as i64,
+                        key,
+                        path_str,
+                        duration_ms,
+                        engine_task,
+                        voice_eff,
+                        text_hash,
+                        now_secs()
+                    ],
+                );
+                let _ = insert_audio_sentence(
+                    &conn,
+                    &book_id_task,
+                    sentence,
+                    &text_hash,
+                    &key,
+                    &path_str,
+                    duration_ms,
+                    &engine_task,
+                    &voice_eff,
+                );
+            } else {
                 let req = serde_json::json!({
-                    "text": text,
+                    "text": sentence.text,
                     "engine": engine_task,
                     "voice": voice_eff,
                     "language": lang_eff,
                     "speed": speed_for_task,
                     "cache_key": key,
+                    "cache_subdir": book_folder_task,
                 });
                 match client
                     .post(format!("http://127.0.0.1:{port}/tts/realtime"))
@@ -163,12 +236,14 @@ pub async fn start_tts_job(
                         if let Ok(body) = resp.json::<SidecarSynthResult>().await {
                             let conn = db.lock();
                             let _ = conn.execute(
-                                "INSERT OR REPLACE INTO audio_chunks (id, book_id, page_id, section_id, cache_key, path, duration_ms, engine, voice_preset, text_hash, created_at)
-                                 VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                                "INSERT OR REPLACE INTO audio_chunks (id, book_id, page_id, section_id, sentence_index, cache_key, path, duration_ms, engine, voice_preset, text_hash, created_at)
+                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                                 params![
                                     Uuid::new_v4().to_string(),
                                     book_id_task,
-                                    page_id,
+                                    sentence.page_id,
+                                    sentence.section_id,
+                                    sentence.sentence_index as i64,
                                     body.cache_key,
                                     body.path,
                                     body.duration_ms,
@@ -177,6 +252,17 @@ pub async fn start_tts_job(
                                     text_hash,
                                     now_secs()
                                 ],
+                            );
+                            let _ = insert_audio_sentence(
+                                &conn,
+                                &book_id_task,
+                                sentence,
+                                &text_hash,
+                                &body.cache_key,
+                                &body.path,
+                                body.duration_ms,
+                                &engine_task,
+                                &voice_eff,
                             );
                         }
                     }
@@ -248,6 +334,40 @@ pub async fn start_tts_job(
     })
 }
 
+fn insert_audio_sentence(
+    conn: &rusqlite::Connection,
+    book_id: &str,
+    sentence: &PageSentence,
+    text_hash: &str,
+    cache_key: &str,
+    path: &str,
+    duration_ms: i64,
+    engine: &str,
+    voice: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "INSERT INTO audio_sentences (id, book_id, page_id, section_id, sentence_index, text, text_hash, cache_key, path, duration_ms, engine, voice_preset, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+         ON CONFLICT(book_id, page_id, sentence_index, engine, voice_preset, text_hash)
+         DO UPDATE SET cache_key = excluded.cache_key, path = excluded.path, duration_ms = excluded.duration_ms, created_at = excluded.created_at",
+        params![
+            Uuid::new_v4().to_string(),
+            book_id,
+            sentence.page_id,
+            sentence.section_id,
+            sentence.sentence_index as i64,
+            sentence.text,
+            text_hash,
+            cache_key,
+            path,
+            duration_ms,
+            engine,
+            voice,
+            now_secs()
+        ],
+    )
+}
+
 #[tauri::command]
 pub fn cancel_tts_job(state: State<AppState>, job_id: String) -> Result<(), String> {
     let conn = state.db.lock();
@@ -302,14 +422,18 @@ pub async fn play_cached_or_generate(
 
     let engine_local = engine.clone();
     let key = cache::cache_key(&text_hash, &engine_local, &voice, &language, speed);
-    let _expected_path = cache::cache_path(&state.sidecar.audio_cache_dir(), &key);
+    let book_folder = {
+        let conn = state.db.lock();
+        book_audio_folder(&conn, &book_id).map_err(|e| e.to_string())?
+    };
+    let _expected_path = cache::cache_path_for_book(&state.sidecar.audio_cache_dir(), &book_folder, &key);
 
     // Cache hit?
     if let Some(existing) = {
         let conn = state.db.lock();
         conn.query_row(
-            "SELECT id, path, duration_ms FROM audio_chunks WHERE cache_key = ?1",
-            params![key],
+            "SELECT id, path, duration_ms FROM audio_chunks WHERE book_id = ?1 AND page_id = ?2 AND cache_key = ?3",
+            params![book_id, page_id, key],
             |r| {
                 Ok(AudioChunk {
                     id: r.get(0)?,
@@ -341,6 +465,7 @@ pub async fn play_cached_or_generate(
         "language": language,
         "speed": speed,
         "cache_key": key,
+        "cache_subdir": book_folder,
     });
     let resp = client
         .post(format!(
@@ -430,35 +555,105 @@ pub async fn get_tts_status(state: State<'_, AppState>) -> Result<TtsStatus, Str
     })
 }
 
-fn load_pages_for_scope(
+fn load_sentences_for_scope(
     conn: &rusqlite::Connection,
     book_id: &str,
     scope: &str,
-) -> Result<Vec<(String, String)>> {
+) -> Result<Vec<PageSentence>> {
+    let pages = load_pages_with_sections_for_scope(conn, book_id, scope)?;
+    let mut out = Vec::new();
+    for (page_id, section_id, content) in pages {
+        for (sentence_index, text) in split_sentences(&content).into_iter().enumerate() {
+            out.push(PageSentence {
+                page_id: page_id.clone(),
+                section_id: section_id.clone(),
+                sentence_index,
+                text,
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn load_pages_with_sections_for_scope(
+    conn: &rusqlite::Connection,
+    book_id: &str,
+    scope: &str,
+) -> Result<Vec<(String, String, String)>> {
     let mut out = Vec::new();
     if scope == "whole_book" {
         let mut stmt = conn.prepare(
-            "SELECT id, content FROM pages WHERE book_id = ?1 ORDER BY page_index",
+            "SELECT id, section_id, content FROM pages WHERE book_id = ?1 ORDER BY page_index",
         )?;
-        for row in stmt.query_map(params![book_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+        for row in stmt.query_map(params![book_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+        })? {
             out.push(row?);
         }
     } else if let Some(rest) = scope.strip_prefix("section:") {
         let mut stmt = conn.prepare(
-            "SELECT id, content FROM pages WHERE book_id = ?1 AND section_id = ?2 ORDER BY page_index",
+            "SELECT id, section_id, content FROM pages WHERE book_id = ?1 AND section_id = ?2 ORDER BY page_index",
         )?;
-        for row in stmt.query_map(params![book_id, rest], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+        for row in stmt.query_map(params![book_id, rest], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+        })? {
             out.push(row?);
         }
     } else if let Some(rest) = scope.strip_prefix("page:") {
         let mut stmt = conn.prepare(
-            "SELECT id, content FROM pages WHERE book_id = ?1 AND id = ?2",
+            "SELECT id, section_id, content FROM pages WHERE book_id = ?1 AND id = ?2",
         )?;
-        for row in stmt.query_map(params![book_id, rest], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+        for row in stmt.query_map(params![book_id, rest], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+        })? {
             out.push(row?);
         }
     }
     Ok(out)
+}
+
+pub fn split_sentences(text: &str) -> Vec<String> {
+    fn is_terminator(ch: char) -> bool {
+        matches!(ch, '。' | '！' | '？' | '；' | '.' | '!' | '?' | ';')
+    }
+    fn is_closing_quote(ch: char) -> bool {
+        matches!(ch, '"' | '”' | '」' | '』')
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+        buf.push(c);
+        if is_terminator(c) {
+            if let Some(next) = chars.get(i + 1) {
+                if is_closing_quote(*next) {
+                    buf.push(*next);
+                    i += 1;
+                }
+            }
+            let trimmed = buf.trim();
+            if !trimmed.is_empty() {
+                out.push(trimmed.to_string());
+            }
+            buf.clear();
+        } else if c == '\n' && chars.get(i + 1) == Some(&'\n') {
+            let trimmed = buf.trim();
+            if !trimmed.is_empty() {
+                out.push(trimmed.to_string());
+            }
+            buf.clear();
+            i += 1;
+        }
+        i += 1;
+    }
+    let tail = buf.trim();
+    if !tail.is_empty() {
+        out.push(tail.to_string());
+    }
+    out
 }
 
 /// Best-effort extraction of a useful message from a sidecar error body.
@@ -601,23 +796,21 @@ pub fn is_predominantly_chinese(text: &str) -> bool {
     total >= 1 && cjk >= 8 && cjk * 10 >= total * 3
 }
 
-/// Mutates `voice` + `language` to match the page's actual language when the
+/// Mutates `voice` + `language` to match the text's actual language when the
 /// user's saved choice would phonemize wrong (e.g. American voice on a
 /// Chinese book).
 fn detect_and_override_voice(text: &str, voice: &mut String, language: &mut String, engine: &str) {
-    // Only Kokoro speaks multiple languages right now; Qwen / stub don't have
-    // per-language voices so leave them alone.
+    if !is_predominantly_chinese(text) {
+        return;
+    }
+    if engine == "qwen" {
+        *language = "zh".to_string();
+        return;
+    }
     if engine != "kokoro" {
         return;
     }
-    let need_prefix = if is_predominantly_chinese(text) {
-        Some('z')
-    } else {
-        // Could extend: Japanese / Korean / ... detectors. For now we only
-        // override when the page is clearly Chinese.
-        None
-    };
-    let Some(needed) = need_prefix else { return; };
+    let needed = 'z';
     let current = voice_prefix(voice);
     if current == Some(needed) {
         // Voice already correct; just make sure language matches so the cache
@@ -715,7 +908,7 @@ mod voice_detection_tests {
     }
 
     #[test]
-    fn detect_is_noop_for_qwen() {
+    fn detect_sets_chinese_language_for_qwen() {
         let mut voice = "default".to_string();
         let mut language = "en".to_string();
         detect_and_override_voice(
@@ -725,7 +918,7 @@ mod voice_detection_tests {
             "qwen",
         );
         assert_eq!(voice, "default");
-        assert_eq!(language, "en");
+        assert_eq!(language, "zh");
     }
 }
 
@@ -737,6 +930,7 @@ mod voice_detection_tests {
 pub async fn synth_sentence(
     state: State<'_, AppState>,
     text: String,
+    book_id: Option<String>,
 ) -> Result<AudioChunk, String> {
     let tts_settings = crate::reader::get_tts_settings(state.clone())
         .unwrap_or_else(|_| crate::reader::TtsSettings::default());
@@ -750,13 +944,20 @@ pub async fn synth_sentence(
 
     let text_hash = hex::encode(Sha256::digest(text.as_bytes()));
     let key = cache::cache_key(&text_hash, &engine, &voice, &language, speed);
+    let stored_book_id = book_id.unwrap_or_default();
+    let book_folder = if stored_book_id.is_empty() {
+        String::new()
+    } else {
+        let conn = state.db.lock();
+        book_audio_folder(&conn, &stored_book_id).map_err(|e| e.to_string())?
+    };
 
     // Cache hit?
     if let Some(existing) = {
         let conn = state.db.lock();
         conn.query_row(
-            "SELECT id, path, duration_ms FROM audio_chunks WHERE cache_key = ?1",
-            params![key],
+            "SELECT id, path, duration_ms FROM audio_chunks WHERE book_id = ?1 AND cache_key = ?2",
+            params![stored_book_id, key],
             |r| {
                 Ok(AudioChunk {
                     id: r.get(0)?,
@@ -787,6 +988,7 @@ pub async fn synth_sentence(
         "language": language,
         "speed": speed,
         "cache_key": key,
+        "cache_subdir": book_folder,
     });
     let resp = client
         .post(format!("http://127.0.0.1:{}/tts/realtime", state.sidecar.port()))
@@ -805,9 +1007,10 @@ pub async fn synth_sentence(
         let conn = state.db.lock();
         let _ = conn.execute(
             "INSERT OR REPLACE INTO audio_chunks (id, book_id, page_id, section_id, cache_key, path, duration_ms, engine, voice_preset, text_hash, created_at)
-             VALUES (?1, '', NULL, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             VALUES (?1, ?2, NULL, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 chunk_id,
+                stored_book_id,
                 body.cache_key,
                 body.path,
                 body.duration_ms,

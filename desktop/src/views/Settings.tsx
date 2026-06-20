@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSettingsStore } from "../state/settings";
 import { useTtsSettingsStore } from "../state/tts";
 import { usePlayerStore } from "../state/player";
 import { useT, type MessageKey } from "../lib/i18n";
+import { api, type StorageSettings } from "../lib/api";
 
 interface SettingsProps {
   onClose: () => void;
@@ -17,10 +18,17 @@ export function Settings({ onClose }: SettingsProps) {
   const ttsLoaded = useTtsSettingsStore((s) => s.loaded);
   const loadTts = useTtsSettingsStore((s) => s.load);
   const updateTts = useTtsSettingsStore((s) => s.update);
+  const [storage, setStorage] = useState<StorageSettings | null>(null);
 
   useEffect(() => {
     if (!ttsLoaded) loadTts();
   }, [ttsLoaded, loadTts]);
+
+  useEffect(() => {
+    api.getStorageSettings().then(setStorage).catch((e) => {
+      console.error("loadStorageSettings failed", e);
+    });
+  }, []);
 
   const currentEngine = useMemo(
     () => engines.find((e) => e.id === tts.engine) ?? engines[0],
@@ -72,6 +80,21 @@ export function Settings({ onClose }: SettingsProps) {
       return;
     }
     updateTts({ voice: voiceId, language: v.language });
+  };
+
+  const updateStorage = async (patch: Partial<StorageSettings>) => {
+    if (!storage) return;
+    const next = { ...storage, ...patch };
+    setStorage(next);
+    await api.saveStorageSettings(next);
+  };
+
+  const pickStorageDir = async (field: keyof StorageSettings) => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked === "string") {
+      updateStorage({ [field]: picked });
+    }
   };
 
   return (
@@ -178,6 +201,42 @@ export function Settings({ onClose }: SettingsProps) {
         {/* Storage */}
         <section className="settings-section">
           <h2>{t("settings.storage")}</h2>
+          {storage && (
+            <>
+              <Row label={t("settings.storage.dataDir")}>
+                <div className="font-px-row">
+                  <div className="settings-meta" style={{ flex: 1, minWidth: 200 }}>
+                    {storage.dataDir}
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => pickStorageDir("dataDir")}
+                  >
+                    {t("settings.storage.pick")}
+                  </button>
+                </div>
+                <div className="settings-meta">{t("settings.storage.restartHint")}</div>
+              </Row>
+
+              <Row label={t("settings.storage.audioDir")}>
+                <div className="font-px-row">
+                  <div className="settings-meta" style={{ flex: 1, minWidth: 200 }}>
+                    {storage.audioDir}
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => pickStorageDir("audioDir")}
+                  >
+                    {t("settings.storage.pick")}
+                  </button>
+                </div>
+                <div className="settings-meta">{t("settings.storage.restartHint")}</div>
+              </Row>
+            </>
+          )}
+
           <Row label={t("settings.storage.importsBackup")}>
             <div className="font-px-row">
               <div className="settings-meta" style={{ flex: 1, minWidth: 200 }}>

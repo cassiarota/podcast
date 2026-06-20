@@ -87,6 +87,10 @@ interface Messages {
   "settings.tts.preload.on": string;
   "settings.tts.preload.off": string;
   "settings.storage": string;
+  "settings.storage.dataDir": string;
+  "settings.storage.audioDir": string;
+  "settings.storage.pick": string;
+  "settings.storage.restartHint": string;
   "settings.storage.importsBackup": string;
   "settings.storage.importsBackup.pick": string;
   "settings.storage.importsBackup.disabled": string;
@@ -218,6 +222,10 @@ const ZH: Messages = {
   "settings.tts.preload.on": "应用启动时静默预加载（推荐）",
   "settings.tts.preload.off": "首次播放时再加载",
   "settings.storage": "存储",
+  "settings.storage.dataDir": "数据库目录",
+  "settings.storage.audioDir": "音频缓存目录",
+  "settings.storage.pick": "选择目录…",
+  "settings.storage.restartHint": "更改后重启应用生效；预生成脚本下次运行会使用新位置。",
   "settings.storage.importsBackup": "导入备份目录",
   "settings.storage.importsBackup.pick": "选择目录…",
   "settings.storage.importsBackup.disabled": "（未设置 — 不保存额外副本）",
@@ -347,6 +355,10 @@ const EN: Messages = {
   "settings.tts.preload.on": "Preload silently on app boot (recommended)",
   "settings.tts.preload.off": "Load on first ▶ Play",
   "settings.storage": "Storage",
+  "settings.storage.dataDir": "Database directory",
+  "settings.storage.audioDir": "Audio cache directory",
+  "settings.storage.pick": "Pick a folder…",
+  "settings.storage.restartHint": "Restart the app after changing this. The precache script uses the new path on its next run.",
   "settings.storage.importsBackup": "Import backup directory",
   "settings.storage.importsBackup.pick": "Pick a folder…",
   "settings.storage.importsBackup.disabled": "(unset — no extra copy)",

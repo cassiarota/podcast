@@ -74,6 +74,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             book_id         TEXT NOT NULL,
             page_id         TEXT,
             section_id      TEXT,
+            sentence_index  INTEGER,
             cache_key       TEXT NOT NULL UNIQUE,
             path            TEXT NOT NULL,
             duration_ms     INTEGER NOT NULL DEFAULT 0,
@@ -82,7 +83,33 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             text_hash       TEXT NOT NULL,
             created_at      INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS playback_positions (
+            book_id         TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+            page_id         TEXT NOT NULL,
+            sentence_index  INTEGER NOT NULL DEFAULT 0,
+            updated_at      INTEGER NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS audio_chunks_book ON audio_chunks(book_id);
+
+        CREATE TABLE IF NOT EXISTS audio_sentences (
+            id              TEXT PRIMARY KEY,
+            book_id         TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+            page_id         TEXT NOT NULL,
+            section_id      TEXT NOT NULL,
+            sentence_index  INTEGER NOT NULL,
+            text            TEXT NOT NULL,
+            text_hash       TEXT NOT NULL,
+            cache_key       TEXT NOT NULL,
+            path            TEXT NOT NULL,
+            duration_ms     INTEGER NOT NULL DEFAULT 0,
+            engine          TEXT NOT NULL,
+            voice_preset    TEXT NOT NULL,
+            created_at      INTEGER NOT NULL,
+            UNIQUE(book_id, page_id, sentence_index, engine, voice_preset, text_hash)
+        );
+        CREATE INDEX IF NOT EXISTS audio_sentences_book ON audio_sentences(book_id, page_id, sentence_index);
+        CREATE INDEX IF NOT EXISTS audio_sentences_cache ON audio_sentences(cache_key);
 
         CREATE TABLE IF NOT EXISTS settings (
             key             TEXT PRIMARY KEY,
@@ -117,6 +144,28 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS notes_book ON notes(book_id, created_at);
         "#,
     )?;
+    add_column_if_missing(conn, "audio_chunks", "sentence_index", "INTEGER")?;
+    Ok(())
+}
+
+fn add_column_if_missing(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let exists = stmt
+        .query_map([], |r| r.get::<_, String>(1))?
+        .filter_map(Result::ok)
+        .any(|name| name == column);
+    drop(stmt);
+    if !exists {
+        conn.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
+            [],
+        )?;
+    }
     Ok(())
 }
 
@@ -151,9 +200,11 @@ mod tests {
             .filter_map(Result::ok)
             .collect();
         for required in [
+            "audio_sentences",
             "audio_chunks",
             "books",
             "pages",
+            "playback_positions",
             "reading_positions",
             "sections",
             "settings",

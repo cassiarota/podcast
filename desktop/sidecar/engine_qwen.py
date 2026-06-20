@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import wave
 from pathlib import Path
+from typing import Sequence
 
 from engine_base import Engine, NotReadyError
 
@@ -22,7 +23,6 @@ class QwenEngine(Engine):
 
     def __init__(self) -> None:
         self._model = None
-        self._tokenizer = None
         self._sample_rate = DEFAULT_SAMPLE_RATE
 
     def load(self) -> None:
@@ -55,19 +55,24 @@ class QwenEngine(Engine):
             )
 
         try:
-            from qwen_tts import QwenTTSModel, QwenTTSTokenizer  # type: ignore
+            from qwen_tts import Qwen3TTSModel  # type: ignore
         except ImportError as exc:
             raise NotReadyError(
                 reason="qwen_tts_not_installed",
                 message="Install qwen-tts in the Windows sidecar venv.",
             ) from exc
 
-        self._tokenizer = QwenTTSTokenizer.from_pretrained(str(TOKENIZER_DIR))
-        self._model = QwenTTSModel.from_pretrained(str(MODEL_DIR)).to("cuda").eval()
+        self._model = Qwen3TTSModel.from_pretrained(
+            str(MODEL_DIR),
+            device_map="cuda:0",
+            dtype=torch.bfloat16,
+            attn_implementation="sdpa",
+        )
+        if hasattr(self._model, "model") and hasattr(self._model.model, "eval"):
+            self._model.model.eval()
 
     def unload(self) -> None:
         self._model = None
-        self._tokenizer = None
 
     def synthesize(
         self,
@@ -81,21 +86,87 @@ class QwenEngine(Engine):
         if self._model is None:
             self.load()
         assert self._model is not None
-        assert self._tokenizer is not None
         import numpy as np  # lazy: numpy only needed when we actually synthesize
 
-        tokens = self._tokenizer.encode(text, language=language, voice=voice)
-        # The exact synth API depends on the installed qwen-tts version.
-        # We codify the contract here; the Windows verification step is the
-        # final source of truth (see windows/README.md).
-        audio = self._model.synthesize(tokens, speed=speed)
-        if hasattr(audio, "cpu"):
-            audio = audio.cpu().numpy()
-        audio = np.asarray(audio, dtype=np.float32).reshape(-1)
-        pcm = np.clip(audio * 32767, -32768, 32767).astype(np.int16)
-        with wave.open(out_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(self._sample_rate)
-            wf.writeframes(pcm.tobytes())
-        return int(len(audio) * 1000 / self._sample_rate)
+        wavs, sample_rate = self._model.generate_custom_voice(
+            text=text,
+            language=_resolve_language(language),
+            speaker=_resolve_speaker(voice, language),
+            instruct="",
+        )
+        self._sample_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
+        audio = np.asarray(wavs[0], dtype=np.float32).reshape(-1)
+        return _write_wav(audio, out_path, self._sample_rate)
+
+    def synthesize_many(
+        self,
+        texts: Sequence[str],
+        out_paths: Sequence[str],
+        *,
+        voice: str = "default",
+        language: str = "en",
+        speed: float = 1.0,
+    ) -> list[int]:
+        if len(texts) != len(out_paths):
+            raise ValueError("texts and out_paths must have the same length")
+        if not texts:
+            return []
+        if self._model is None:
+            self.load()
+        assert self._model is not None
+        import numpy as np  # lazy
+
+        resolved_language = _resolve_language(language)
+        resolved_speaker = _resolve_speaker(voice, language)
+        wavs, sample_rate = self._model.generate_custom_voice(
+            text=list(texts),
+            language=[resolved_language] * len(texts),
+            speaker=[resolved_speaker] * len(texts),
+            instruct=[""] * len(texts),
+        )
+        self._sample_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
+        durations: list[int] = []
+        for wav, out_path in zip(wavs, out_paths):
+            audio = np.asarray(wav, dtype=np.float32).reshape(-1)
+            durations.append(_write_wav(audio, out_path, self._sample_rate))
+        return durations
+
+
+def _write_wav(audio, out_path: str, sample_rate: int) -> int:
+    import numpy as np
+
+    pcm = np.clip(audio * 32767, -32768, 32767).astype(np.int16)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(out_path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm.tobytes())
+    return int(len(audio) * 1000 / sample_rate)
+
+
+def _resolve_language(language: str) -> str:
+    normalized = (language or "en").lower()
+    if normalized.startswith("zh"):
+        return "Chinese"
+    if normalized.startswith("en"):
+        return "English"
+    return "Auto"
+
+
+def _resolve_speaker(voice: str, language: str) -> str:
+    normalized = (voice or "default").lower()
+    supported = {
+        "aiden",
+        "dylan",
+        "eric",
+        "ono_anna",
+        "ryan",
+        "serena",
+        "sohee",
+        "uncle_fu",
+        "vivian",
+    }
+    if normalized in supported:
+        return normalized
+    return "vivian" if _resolve_language(language) == "Chinese" else "ryan"

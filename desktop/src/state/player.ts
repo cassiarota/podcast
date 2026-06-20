@@ -145,7 +145,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Kick off all synth requests in parallel. Each request's promise
     // gets stored so the play-loop can await them in order.
     const promises: Promise<AudioChunk>[] = sentences.map((t) =>
-      api.synthSentence(t),
+      api.synthSentence(t, bookId),
     );
 
     // Mark slots as their requests resolve, for the highlighting UI to
@@ -174,6 +174,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     for (let i = fromIndex; i < sentences.length; i++) {
       if (playGeneration !== myGeneration) return; // stopped/replaced
       set({ currentSentence: i });
+      void api.savePlaybackPosition(bookId, pageId, i).catch((e) =>
+        console.warn("[player] save playback position failed", e),
+      );
       let chunk: AudioChunk;
       try {
         chunk = await promises[i];
@@ -241,7 +244,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ status: "idle", error: "no page text" });
         return;
       }
-      await get().playPage(bookId, pageId, text);
+      const saved = await api.getPlaybackPosition(bookId);
+      const fromIndex = saved?.page_id === pageId ? saved.sentence_index : 0;
+      await get().playPage(bookId, pageId, text, fromIndex);
     } catch (e) {
       set({ status: "idle", error: String(e) });
     }

@@ -46,6 +46,13 @@ pub struct ReadingPosition {
     pub percent: f64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PlaybackPosition {
+    pub book_id: String,
+    pub page_id: String,
+    pub sentence_index: i64,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ReaderSettings {
     #[serde(rename = "fontSize")]
@@ -421,6 +428,46 @@ pub fn save_reading_position(
             percent = excluded.percent,
             updated_at = excluded.updated_at",
         params![book_id, section_id, page_index, source_offset, percent, now_secs()],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_playback_position(
+    state: State<AppState>,
+    book_id: String,
+) -> Result<Option<PlaybackPosition>, String> {
+    let conn = state.db.lock();
+    conn.query_row(
+        "SELECT book_id, page_id, sentence_index FROM playback_positions WHERE book_id = ?1",
+        params![book_id],
+        |r| Ok(PlaybackPosition {
+            book_id: r.get(0)?,
+            page_id: r.get(1)?,
+            sentence_index: r.get(2)?,
+        }),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_playback_position(
+    state: State<AppState>,
+    book_id: String,
+    page_id: String,
+    sentence_index: i64,
+) -> Result<(), String> {
+    let conn = state.db.lock();
+    conn.execute(
+        "INSERT INTO playback_positions (book_id, page_id, sentence_index, updated_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(book_id) DO UPDATE SET
+            page_id = excluded.page_id,
+            sentence_index = excluded.sentence_index,
+            updated_at = excluded.updated_at",
+        params![book_id, page_id, sentence_index, now_secs()],
     )
     .map_err(|e| e.to_string())?;
     Ok(())

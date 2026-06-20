@@ -66,9 +66,45 @@ body {
 /* Reader */
 .reader { position: relative; height: 100vh; padding: 60px 80px; }
 .reader-content {
-  height: 100%; overflow: hidden; white-space: pre-wrap;
+  height: 100%; overflow: hidden;
   font-size: var(--font-size); line-height: 1.7; font-family: Georgia, serif;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.reader.cursor-left, .reader.cursor-left .reader-content, .reader.cursor-left .sentence { cursor: w-resize; }
+.reader.cursor-right, .reader.cursor-right .reader-content, .reader.cursor-right .sentence { cursor: e-resize; }
+.reader.cursor-center, .reader.cursor-center .reader-content, .reader.cursor-center .sentence { cursor: pointer; }
+.reader-section-title {
+  margin: 0 0 24px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: calc(var(--font-size) * 1.55);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.reader-heading {
+  margin: 0 0 22px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: calc(var(--font-size) * 1.45);
+  line-height: 1.28;
+  font-weight: 700;
+}
+.reader-subheading {
+  margin: 18px 0 12px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: calc(var(--font-size) * 1.16);
+  line-height: 1.35;
+  font-weight: 650;
+}
+.reader-paragraph {
+  margin: 0 0 0.9em;
+  text-indent: 2em;
+  white-space: normal;
+}
+.reader-heading + .reader-paragraph,
+.reader-subheading + .reader-paragraph,
+.reader-section-title + .reader-paragraph {
+  text-indent: 0;
 }
 /* Single full-window pointer-target overlay. Reader.tsx interprets pointer
  * events as tap / swipe / "tap-outside-menu". Controls live above this and
@@ -99,14 +135,27 @@ body {
 .controls input[type="range"] { width: 110px; }
 .controls .spacer { flex: 1; }
 .progress { font-variant-numeric: tabular-nums; font-size: 13px; color: #ccc; }
+.progress-button {
+  border: 0; background: transparent; color: #ccc; cursor: pointer;
+  font-variant-numeric: tabular-nums; font-size: 13px; padding: 6px 8px;
+}
 .progress-badge {
   position: fixed; right: 14px; bottom: 14px; z-index: 4;
   background: rgba(0,0,0,0.55); color: #fff;
   padding: 4px 10px; border-radius: 12px; font-size: 12px;
-  font-variant-numeric: tabular-nums; pointer-events: none;
+  font-variant-numeric: tabular-nums; pointer-events: auto;
+  border: 0; cursor: pointer;
   transition: opacity 0.2s;
 }
-.progress-badge.with-controls { opacity: 0; }
+.progress-badge.with-controls { opacity: 0; pointer-events: none; }
+.progress-popover {
+  position: fixed; right: 18px; bottom: 54px; z-index: 15;
+  width: min(420px, calc(100vw - 36px)); padding: 14px 16px;
+  border-radius: 10px; background: rgba(20, 20, 20, 0.96); color: #eee;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.4); display: grid; gap: 10px;
+}
+.progress-popover input[type="range"] { width: 100%; }
+.progress-popover button { justify-self: end; }
 
 /* TOC */
 .toc {
@@ -117,6 +166,11 @@ body {
 }
 .toc.open { transform: translateX(0); }
 .toc-header { display: flex; align-items: center; gap: 8px; }
+.toc-header button { flex: 1; }
+.toc-header button.active { background: #80633e; color: #fff; }
+.bookmark-list li { display: flex; flex-direction: column; gap: 5px; }
+.bookmark-list small { opacity: 0.65; }
+.bookmark-empty { cursor: default !important; opacity: 0.65; }
 .toc h3 { margin: 0; flex: 1; }
 .toc ul { list-style: none; padding: 0; margin: 12px 0 0; }
 .toc li { padding: 8px 4px; cursor: pointer; border-bottom: 1px solid #333; }
@@ -267,6 +321,10 @@ body {
   padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
 }
 .play-controls button:hover { background: #333; }
+.inline-speed select {
+  min-width: 68px; background: #222; color: #eee; border: 1px solid #555;
+  border-radius: 5px; padding: 5px 7px;
+}
 .play-time {
   color: #999; font-size: 12px; font-variant-numeric: tabular-nums;
   margin-left: 6px;
@@ -485,7 +543,7 @@ body {
 .stats-book-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Sentence rendering in the reader */
-.sentence { cursor: pointer; transition: background 0.15s; }
+.sentence { transition: background 0.15s; }
 .sentence:hover { background: rgba(245, 211, 107, 0.10); }
 .sentence-active {
   background: rgba(245, 211, 107, 0.22);
@@ -509,6 +567,12 @@ body {
   font-size: 13px;
 }
 .sentence-menu button:hover { background: rgba(0, 0, 0, 0.5); }
+.selection-toolbar {
+  position: fixed; z-index: 30; transform: translate(-50%, -100%);
+  display: flex; gap: 6px; padding: 7px; border-radius: 8px;
+  background: rgba(20, 20, 20, 0.97); box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+}
+.selection-toolbar button { white-space: nowrap; }
 
 /* Speed selector in Settings */
 .speed-row { display: flex; gap: 6px; }

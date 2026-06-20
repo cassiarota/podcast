@@ -1,0 +1,14 @@
+从断点继续生成：
+powershell -ExecutionPolicy Bypass -File D:\project\podcast\desktop\scripts\precache-geektime-qwen.ps1 -Mode resume -BooksDir D:\document\geektime-books -BatchSize 12 -BatchCharLimit 1200
+
+带日志保存，适合跑一两天：
+powershell -ExecutionPolicy Bypass -File D:\project\podcast\desktop\scripts\precache-geektime-qwen.ps1 -Mode resume -BooksDir D:\document\geektime-books -BatchSize 12 -BatchCharLimit 1200 *> D:\project\podcast\desktop\precache-run.log
+
+查看当前进度，不会启动 Qwen：
+powershell -ExecutionPolicy Bypass -File D:\project\podcast\desktop\scripts\precache-geektime-qwen.ps1 -Mode status -BooksDir D:\document\geektime-books
+
+检查 6 本书是否全部完整生成：
+powershell -ExecutionPolicy Bypass -File D:\project\podcast\desktop\scripts\precache-geektime-qwen.ps1 -Mode verify -BooksDir D:\document\geektime-books
+
+如果想实时看 GPU：
+nvidia-smi -l 5

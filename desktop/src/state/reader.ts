@@ -48,6 +48,10 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const { openBookId, pageCount } = get();
     if (!openBookId) return;
     const clamped = Math.max(0, Math.min(pageIndex, pageCount - 1));
+    const { usePlayerStore } = await import("./player");
+    const player = usePlayerStore.getState();
+    const continuePlaying = player.status === "playing" || player.status === "loading";
+    if (continuePlaying) player.stop();
     const page = await api.getPage(openBookId, clamped);
     if (!page) return;
     const percent = pageCount > 0 ? (clamped + 1) / pageCount : 0;
@@ -59,6 +63,9 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       percent
     );
     set({ currentPage: page, pageIndex: clamped });
+    if (continuePlaying) {
+      void usePlayerStore.getState().playPage(openBookId, page.id, page.content, 0);
+    }
   },
   next: async () => {
     const { pageIndex } = get();
