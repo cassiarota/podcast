@@ -114,10 +114,9 @@ jobs:
       - name: Build Tauri app
         working-directory: desktop
         env:
-          # Skip code signing — no Apple Developer ID or Windows signing
-          # cert configured. Output is unsigned (Gatekeeper / SmartScreen
-          # will warn; users right-click → Open the first time).
-          APPLE_SIGNING_IDENTITY: ''
+          # Ad-hoc sign macOS builds because no Apple Developer ID is
+          # configured. Gatekeeper may still warn on first launch.
+          APPLE_SIGNING_IDENTITY: '-'
           TAURI_SKIP_SIDECAR_SIGNATURE_CHECK: '1'
         run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.ext }}
 
