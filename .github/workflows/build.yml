@@ -229,7 +229,14 @@ jobs:
             "test -s '$destination/SuiShenTing-windows-x64.msi' && test -s '$destination/SuiShenTing-macos-arm64.dmg'"
 
       - name: Verify public downloads
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
         run: |
           set -euo pipefail
-          curl -fsSI https://cassiangroup.uk/downloads/podcast/SuiShenTing-windows-x64.msi
-          curl -fsSI https://cassiangroup.uk/downloads/podcast/SuiShenTing-macos-arm64.dmg
+          # Verify through the origin because Cloudflare may challenge
+          # GitHub-hosted runner IPs even when the files are healthy.
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "curl -fsSI http://127.0.0.1/downloads/podcast/SuiShenTing-windows-x64.msi >/dev/null && \
+             curl -fsSI http://127.0.0.1/downloads/podcast/SuiShenTing-macos-arm64.dmg >/dev/null"
