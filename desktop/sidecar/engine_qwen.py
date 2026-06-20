@@ -7,21 +7,48 @@ inside `load()`/`synthesize()`.
 
 from __future__ import annotations
 
+import os
 import wave
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 from engine_base import Engine, NotReadyError
 
-MODEL_DIR = Path(r"D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice")
-TOKENIZER_DIR = Path(r"D:\models\Qwen3-TTS-Tokenizer-12Hz")
+# Default Windows install locations. Both are overridable with environment
+# variables so a user can point the app at a different Qwen checkpoint (or any
+# other custom-voice model that exposes the same `qwen_tts` API) without
+# editing code:
+#   QWEN_MODEL_DIR     — the model weights directory
+#   QWEN_TOKENIZER_DIR — the matching tokenizer directory
+DEFAULT_MODEL_DIR = Path(r"D:\models\Qwen3-TTS-12Hz-1.7B-CustomVoice")
+DEFAULT_TOKENIZER_DIR = Path(r"D:\models\Qwen3-TTS-Tokenizer-12Hz")
 DEFAULT_SAMPLE_RATE = 24000
+
+
+def _resolve_dir(env_var: str, default: Path) -> Path:
+    override = os.getenv(env_var)
+    return Path(override).expanduser() if override else default
 
 
 class QwenEngine(Engine):
     name = "qwen"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        model_dir: Optional[str] = None,
+        tokenizer_dir: Optional[str] = None,
+    ) -> None:
+        # Precedence: explicit constructor arg > env var > Windows default.
+        self._model_dir = (
+            Path(model_dir).expanduser()
+            if model_dir
+            else _resolve_dir("QWEN_MODEL_DIR", DEFAULT_MODEL_DIR)
+        )
+        self._tokenizer_dir = (
+            Path(tokenizer_dir).expanduser()
+            if tokenizer_dir
+            else _resolve_dir("QWEN_TOKENIZER_DIR", DEFAULT_TOKENIZER_DIR)
+        )
         self._model = None
         self._sample_rate = DEFAULT_SAMPLE_RATE
 
@@ -43,14 +70,15 @@ class QwenEngine(Engine):
             )
 
         missing: list[str] = []
-        if not MODEL_DIR.exists():
-            missing.append(str(MODEL_DIR))
-        if not TOKENIZER_DIR.exists():
-            missing.append(str(TOKENIZER_DIR))
+        if not self._model_dir.exists():
+            missing.append(str(self._model_dir))
+        if not self._tokenizer_dir.exists():
+            missing.append(str(self._tokenizer_dir))
         if missing:
             raise NotReadyError(
                 reason="model_path_missing",
-                message="Qwen model directories missing.",
+                message="Qwen model directories missing. Set QWEN_MODEL_DIR / "
+                "QWEN_TOKENIZER_DIR to point at a custom checkpoint.",
                 paths=missing,
             )
 
@@ -63,7 +91,7 @@ class QwenEngine(Engine):
             ) from exc
 
         self._model = Qwen3TTSModel.from_pretrained(
-            str(MODEL_DIR),
+            str(self._model_dir),
             device_map="cuda:0",
             dtype=torch.bfloat16,
             attn_implementation="sdpa",

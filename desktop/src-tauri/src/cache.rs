@@ -12,9 +12,17 @@ pub fn cache_path(audio_dir: &Path, key: &str) -> PathBuf {
 }
 
 pub fn book_audio_folder_name(title: &str, source_path: Option<&str>, book_id: &str) -> String {
+    // Extract the file stem ourselves rather than via `Path::file_stem`: book
+    // source paths are Windows paths (books live on `D:\...`), but the desktop
+    // app also runs on macOS, where `Path` doesn't treat `\` as a separator and
+    // would fold the entire path into the folder name. Split on both separators
+    // so the same source yields the same folder on every platform.
     let source_stem = source_path
-        .and_then(|path| Path::new(path).file_stem())
-        .and_then(|stem| stem.to_str())
+        .map(|path| path.rsplit(['/', '\\']).next().unwrap_or(path))
+        .map(|name| match name.rsplit_once('.') {
+            Some((stem, _ext)) if !stem.is_empty() => stem,
+            _ => name,
+        })
         .map(str::trim)
         .filter(|stem| !stem.is_empty());
     let base = source_stem.unwrap_or_else(|| title.trim());
@@ -102,6 +110,16 @@ mod tests {
         );
         assert_eq!(folder, "04-左耳听风__12345678");
         assert!(!folder.contains('\\'));
+    }
+
+    #[test]
+    fn book_audio_folder_handles_unix_source_paths() {
+        let folder = book_audio_folder_name(
+            "ignored title",
+            Some("/Users/me/books/My Book.txt"),
+            "abcdef01-2222",
+        );
+        assert_eq!(folder, "My Book__abcdef01");
     }
 
     #[test]

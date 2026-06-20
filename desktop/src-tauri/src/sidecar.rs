@@ -57,22 +57,31 @@ impl SidecarState {
         self.audio_cache_dir.clone()
     }
 
-    /// Returns the absolute path of the bundled Kokoro `.pth` file on macOS,
-    /// or `None` on Windows / if resources weren't bundled.
+    /// Returns the absolute path of the bundled Kokoro `.pth` file,
+    /// or `None` if resources weren't bundled / found.
     pub fn kokoro_model_path(&self) -> Option<PathBuf> {
-        // The bundled location on macOS will be inside the resource dir;
-        // in dev we fall back to repo-relative `models/Kokoro-82M/...`.
-        let bundled = self
-            .resource_dir
-            .as_ref()
-            .map(|r| r.join("Kokoro-82M").join("kokoro-v1_0.pth"));
-        let dev = std::env::current_dir()
+        // Tauri's list-form `resources` (see tauri.{macos,windows}.conf.json)
+        // bundles `../../models/Kokoro-82M/**/*` by mangling each `../` segment
+        // into `_up_`, so the model lands at
+        // `<Resources>/_up_/_up_/models/Kokoro-82M/`. The earlier `Kokoro-82M/`
+        // guess was wrong and made the SHIPPED app fall back to dev paths that
+        // don't exist on a user's machine — TTS silently never loaded. We probe
+        // the real bundled layout first, then keep flatter targets for forward
+        // compatibility, then the repo-relative dev path.
+        if let Some(rd) = self.resource_dir.as_ref() {
+            let candidates = [
+                rd.join("_up_/_up_/models/Kokoro-82M/kokoro-v1_0.pth"),
+                rd.join("Kokoro-82M/kokoro-v1_0.pth"),
+                rd.join("models/Kokoro-82M/kokoro-v1_0.pth"),
+            ];
+            if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+                return Some(found);
+            }
+        }
+        std::env::current_dir()
             .ok()
-            .map(|d| d.join("../../models/Kokoro-82M/kokoro-v1_0.pth"));
-        bundled
-            .into_iter()
-            .chain(dev)
-            .find(|p| p.exists())
+            .map(|d| d.join("../../models/Kokoro-82M/kokoro-v1_0.pth"))
+            .filter(|p| p.exists())
     }
 
     pub fn engine_for_platform(&self) -> &'static str {
@@ -175,11 +184,18 @@ impl SidecarState {
     }
 
     fn locate_sidecar_dir(&self) -> Result<PathBuf> {
-        // In bundled builds we expect `<resource_dir>/sidecar/`.
+        // In bundled builds the sidecar `.py` files are listed in
+        // tauri.{macos,windows}.conf.json as `../sidecar/...`, which Tauri
+        // bundles under `<Resources>/_up_/sidecar/`. We probe that real layout
+        // first, then the flat `sidecar/` target, then the dev path. (The flat
+        // location alone was the bug: the shipped app never found main.py and
+        // fell back to a dev path absent on the user's machine.)
         if let Some(rd) = &self.resource_dir {
-            let candidate = rd.join("sidecar");
-            if candidate.exists() {
-                return Ok(candidate);
+            for sub in ["_up_/sidecar", "sidecar"] {
+                let candidate = rd.join(sub);
+                if candidate.join("main.py").exists() {
+                    return Ok(candidate);
+                }
             }
         }
         // Dev: from the repo we run from `desktop/src-tauri` → `../sidecar`.
@@ -238,4 +254,55 @@ fn which_python(sidecar_dir: &std::path::Path, data_dir: &std::path::Path) -> Re
         "no Python interpreter found; install Python 3.12+ or create a venv at {sidecar_dir:?}/.venv \
          (or {data_dir:?}/sidecar-venv for bundled installs)"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn unique_tmp() -> PathBuf {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!(
+            "sidecar-test-{}-{}",
+            std::process::id(),
+            n
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn touch(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"x").unwrap();
+    }
+
+    // Regression: Tauri's list-form `resources` bundles `../../models/...` and
+    // `../sidecar/...` under `_up_/...`. The resolvers must find that real
+    // layout, not the flat `Kokoro-82M/` / `sidecar/` guess that left the
+    // shipped app unable to locate its model or sidecar.
+    #[test]
+    fn kokoro_model_path_resolves_tauri_up_layout() {
+        let resources = unique_tmp();
+        let model = resources.join("_up_/_up_/models/Kokoro-82M/kokoro-v1_0.pth");
+        touch(&model);
+        let state = SidecarState::new(unique_tmp(), unique_tmp(), Some(resources));
+        assert_eq!(state.kokoro_model_path(), Some(model));
+    }
+
+    #[test]
+    fn locate_sidecar_dir_resolves_tauri_up_layout() {
+        let resources = unique_tmp();
+        let main_py = resources.join("_up_/sidecar/main.py");
+        touch(&main_py);
+        let state = SidecarState::new(unique_tmp(), unique_tmp(), Some(resources.clone()));
+        assert_eq!(
+            state.locate_sidecar_dir().unwrap(),
+            resources.join("_up_/sidecar")
+        );
+    }
 }

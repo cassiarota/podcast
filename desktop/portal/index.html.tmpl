@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>随身听 · 本地阅读与听书</title>
+  <meta name="description" content="随身听是支持 TXT、EPUB 与离线语音的 Windows / macOS 本地阅读器。" />
+  <meta name="theme-color" content="#071117" />
+  <link rel="icon" type="image/svg+xml" href="/assets/nav-icon.svg" />
+  <style>
+    :root{color-scheme:dark;--ink:#eef8f7;--muted:#9ab3b2;--teal:#54dccd;--gold:#e5bd5c;--line:rgba(166,241,232,.22)}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%}body{color:var(--ink);font-family:Inter,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:linear-gradient(145deg,#071117,#10262b);line-height:1.65}
+    main{width:min(900px,calc(100% - 36px));margin:auto;padding:34px 0 60px}.back{color:var(--teal);text-decoration:none}.hero{margin-top:34px;padding:44px;border:1px solid var(--line);border-radius:20px;background:rgba(6,17,22,.78);box-shadow:0 24px 70px rgba(0,0,0,.35)}
+    h1{font-size:clamp(36px,7vw,68px);line-height:1;margin:0}.lead{font-size:19px;color:#c4d9d7;max-width:680px}.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:30px 0}.feature{padding:16px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035)}
+    .downloads{display:flex;gap:12px;flex-wrap:wrap}.download{display:inline-flex;align-items:center;gap:9px;padding:13px 18px;border-radius:10px;text-decoration:none;font-weight:800;color:#061013;background:var(--teal)}.download.mac{background:var(--gold)}.download .size{font-weight:600;opacity:.7;font-size:13px}
+    .note{color:var(--muted);font-size:13px;margin-top:18px}
+    .build{margin-top:14px;font-size:12px;color:var(--muted)}.build code{color:#c4d9d7;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    details.sums{margin-top:10px;font-size:12px;color:var(--muted)}details.sums summary{cursor:pointer;color:var(--teal)}details.sums pre{white-space:pre-wrap;word-break:break-all;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px}
+    @media(max-width:560px){.hero{padding:26px 20px}}
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">← 返回妥妥首页</a>
+    <section class="hero">
+      <h1>随身听</h1>
+      <p class="lead">把 TXT 和 EPUB 变成随时可读、可听的本地书库。阅读位置、最后播放句子和书签都会自动保存。</p>
+      <div class="features">
+        <div class="feature"><strong>本地优先</strong><br />书籍、进度和语音缓存保存在自己的电脑。</div>
+        <div class="feature"><strong>阅读与听书同步</strong><br />逐句播放、实时调速，翻页后从新页面继续。</div>
+        <div class="feature"><strong>精确回到上次位置</strong><br />恢复阅读页和最后播放的句子。</div>
+        <div class="feature"><strong>书签与摘录</strong><br />选中文字后收藏、复制或从此处播放。</div>
+      </div>
+      <div class="downloads">
+        <a class="download" href="/downloads/podcast/SuiShenTing-windows-x64.msi">下载 Windows 安装包 <span class="size">__WIN_SIZE__</span></a>
+        <a class="download mac" href="/downloads/podcast/SuiShenTing-macos-arm64.dmg">下载 macOS 安装包 <span class="size">__MAC_SIZE__</span></a>
+      </div>
+      <p class="note">链接始终指向最新成功构建。当前安装包未进行商业代码签名，系统首次打开时可能显示安全提示。</p>
+      <p class="build">版本 <code>__VERSION__</code> · 更新时间 <code>__BUILD_DATE__</code> · 构建 <code>__COMMIT__</code></p>
+      <details class="sums">
+        <summary>SHA-256 校验和</summary>
+        <pre>__SHA256SUMS__</pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

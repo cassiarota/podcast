@@ -184,6 +184,11 @@ jobs:
       contents: read
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
       - name: Download packaged applications
         uses: actions/download-artifact@v4
         with:
@@ -199,6 +204,31 @@ jobs:
           test -s release/SuiShenTing-windows-x64.msi
           test -s release/SuiShenTing-macos-arm64.dmg
           sha256sum release/* > release/SHA256SUMS.txt
+
+      - name: Render portal page with live build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_date=$(date -u '+%Y-%m-%d %H:%M UTC')
+          commit="${GITHUB_SHA::7}"
+          win_size=$(du -h release/SuiShenTing-windows-x64.msi | cut -f1)
+          mac_size=$(du -h release/SuiShenTing-macos-arm64.dmg | cut -f1)
+          python3 - "$build_date" "$commit" "$win_size" "$mac_size" <<'PY'
+          import html, json, sys
+          build_date, commit, win_size, mac_size = sys.argv[1:5]
+          version = json.load(open("desktop/src-tauri/tauri.conf.json"))["version"]
+          sums = open("release/SHA256SUMS.txt").read().replace(" release/", " ")
+          tmpl = open("desktop/portal/index.html.tmpl", encoding="utf-8").read()
+          out = (tmpl
+                 .replace("__VERSION__", html.escape(version))
+                 .replace("__BUILD_DATE__", html.escape(build_date))
+                 .replace("__COMMIT__", html.escape(commit))
+                 .replace("__WIN_SIZE__", html.escape(win_size))
+                 .replace("__MAC_SIZE__", html.escape(mac_size))
+                 .replace("__SHA256SUMS__", html.escape(sums.strip())))
+          open("release_portal.html", "w", encoding="utf-8").write(out)
+          PY
+          test -s release_portal.html
 
       - name: Configure SSH
         env:
@@ -223,10 +253,14 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_USER"
           destination="/opt/cassian/site/downloads/podcast"
-          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$destination'"
+          portal="/opt/cassian/site/podcast/index.html"
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$destination' '$(dirname "$portal")'"
           rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT" release/ "$DEPLOY_USER@$DEPLOY_HOST:$destination/"
+          # Refresh the product/download page so it shows the latest version,
+          # build date and checksums. The fixed download links never change.
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" release_portal.html "$DEPLOY_USER@$DEPLOY_HOST:$portal"
           ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "test -s '$destination/SuiShenTing-windows-x64.msi' && test -s '$destination/SuiShenTing-macos-arm64.dmg'"
+            "test -s '$destination/SuiShenTing-windows-x64.msi' && test -s '$destination/SuiShenTing-macos-arm64.dmg' && test -s '$portal'"
 
       - name: Verify public downloads
         env:
@@ -239,4 +273,5 @@ jobs:
           # GitHub-hosted runner IPs even when the files are healthy.
           ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "curl -fsSI http://127.0.0.1/downloads/podcast/SuiShenTing-windows-x64.msi >/dev/null && \
-             curl -fsSI http://127.0.0.1/downloads/podcast/SuiShenTing-macos-arm64.dmg >/dev/null"
+             curl -fsSI http://127.0.0.1/downloads/podcast/SuiShenTing-macos-arm64.dmg >/dev/null && \
+             curl -fsS  http://127.0.0.1/podcast/ | grep -q 'SuiShenTing-windows-x64.msi'"
